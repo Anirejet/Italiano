@@ -1,8 +1,8 @@
 "use strict";
-const APP_VERSION = "1.0";
+const APP_VERSION = "1.1";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ICON = {
   home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
@@ -56,7 +56,7 @@ function toast(msg) { const t = document.createElement("div"); t.className = "to
 /* ---------------------------------------------------------------- datos */
 const PERSONS = ["io", "tu", "lui / lei / Lei", "noi", "voi", "loro"];
 const TENSES = DATA.tenses;
-const DICT = DATA.dict.map((e, i) => ({ i, o: e[4] ?? i, it: e[0], pr: e[1], es: e[2], cat: e[3], id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) }));
+const DICT = DATA.dict.map((e, i) => ({ i, o: e[4] != null ? e[4] : i, it: e[0], pr: e[1], es: e[2], cat: e[3], id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) }));
 const PHR = DATA.phr.filter(p => !/^Participios/.test(p[3])).map(p => ({ it: p[0], pr: p[1], es: p[2], g: p[3], id: "f" + hash(p[0] + "|" + p[2]), kIt: [...variants(p[0], ART_IT), norm(p[0])], kEs: [...variants(p[2], ART_ES), norm(p[2])] }));
 const CARDS = Object.fromEntries([...DICT, ...PHR].map(e => [e.id, e]));
 const CORDER = ["familia", "números", "tiempo", "alimentos", "ciudad", "viajes", "verbos", "adjetivos", "compras", "casa", "cocina", "ropa", "cuerpo", "salud", "colores", "emociones", "adverbios", "conectores", "interjecciones", "expresiones", "ocio", "trabajo", "estudio", "naturaleza", "animales", "tecnología", "falsos amigos"];
@@ -587,7 +587,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 }
 document.addEventListener("keydown", ev => {
   if (curView !== "review" || !SESSION || !SESSION.q.length || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if (!SESSION.showing && (ev.key === " " || ev.key === "Enter")) { ev.preventDefault(); $("#show")?.click(); }
-  else if (SESSION.showing && "1234".includes(ev.key)) $(`[data-g="${+ev.key - 1}"]`)?.click();
+  if (!SESSION.showing && (ev.key === " " || ev.key === "Enter")) { ev.preventDefault(); const b = $("#show"); if (b) b.click(); }
+  else if (SESSION.showing && "1234".includes(ev.key)) { const b = $(`[data-g="${+ev.key - 1}"]`); if (b) b.click(); }
 });
 render();
+window.__appStarted = true;

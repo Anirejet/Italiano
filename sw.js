@@ -1,6 +1,6 @@
 /* Guarda la app en el dispositivo para que funcione sin internet.
    Al publicar una versión nueva, cambia el número de VERSION. */
-const VERSION = "italiano-v1.0";
+const VERSION = "italiano-v1.1";
 const FILES = ["./", "./index.html", "./app.css", "./app.js", "./data.js", "./manifest.webmanifest",
   "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); });

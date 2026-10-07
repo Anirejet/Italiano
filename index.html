@@ -24,6 +24,21 @@
 </div>
 <nav class="bottom" aria-label="Secciones" id="navBottom"></nav>
 <div id="update" class="update" hidden>Hay una versión nueva de la app. <button class="btn pri" id="doUpdate">Actualizar</button></div>
+<script>
+/* Diagnóstico: si algo impide arrancar, se muestra el motivo en pantalla. */
+window.__errs = [];
+window.onerror = function (msg, src, line) { window.__errs.push(msg + " (" + String(src || "").split("/").pop() + ":" + line + ")"); };
+setTimeout(function () {
+  if (window.__appStarted) return;
+  var v = document.getElementById("view"); if (!v) return;
+  var local = location.protocol === "file:" || location.protocol === "blob:" || location.protocol === "content:";
+  v.innerHTML = '<h1 class="v">No se ha podido abrir la app</h1>' +
+    (local ? '<p class="note">Parece que has abierto el archivo directamente. En el iPhone la app solo funciona abriéndola desde su dirección de internet (https://TU-USUARIO.github.io/italiano/). Mira la guía de publicación.</p>' : '') +
+    (!window.DATA ? '<p class="note err">No se ha cargado el archivo <b>data.js</b>. Comprueba que lo subiste a GitHub junto a index.html.</p>' : '') +
+    '<p class="muted">Datos para el soporte:</p><p class="note" style="word-break:break-all">' +
+    (window.__errs.join("<br>") || "sin errores registrados") + '<br>Navegador: ' + navigator.userAgent + '<br>Dirección: ' + location.href + '</p>';
+}, 5000);
+</script>
 <script src="./data.js"></script>
 <script src="./app.js"></script>
 </body>

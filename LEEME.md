@@ -44,3 +44,17 @@ se instala en el iPhone desde Safari. Una vez instalada funciona sin internet.
   iCloud Drive o en Archivos. Sirve también para pasar tu progreso al ordenador.
 - Para probarla en el ordenador sin publicarla, basta con abrir `index.html` con Chrome o Edge
   (en ese modo no funciona sin conexión ni se puede instalar, pero sí todo lo demás).
+
+## Si no se ve en el iPhone
+1. **No abras el archivo desde Archivos, WhatsApp o el correo.** En el iPhone la app solo funciona
+   desde su dirección de internet (`https://TU-USUARIO.github.io/italiano/`). En el ordenador sí se
+   puede abrir el archivo directamente, por eso allí funciona.
+2. **Comprueba la dirección:** debe llevar tu usuario, `.github.io/` y el nombre del repositorio al final.
+3. **Comprueba que los archivos están en la raíz del repositorio:** al entrar en el repositorio en
+   github.com deben verse directamente `index.html`, `app.js`, `data.js`… y la carpeta `icons`.
+   Si están dentro de otra carpeta, la dirección cambia o la página no aparece.
+4. **El repositorio debe ser Public** y en Settings → Pages debe poner que el sitio está publicado.
+5. Tras subir archivos, espera 2–3 minutos. Si sigues viendo una versión antigua, prueba en una
+   pestaña privada de Safari.
+6. Si aparece la pantalla «No se ha podido abrir la app», haz una captura: incluye los datos
+   necesarios para saber qué ha fallado.
