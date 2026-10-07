@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A6A4C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Italiano">
+<title>Italiano para hispanohablantes</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="app">
+  <nav class="side" aria-label="Secciones">
+    <div class="brand">Italiano<small>para hispanohablantes</small></div>
+    <div id="navSide"></div>
+  </nav>
+  <main><div class="wrap" id="view" tabindex="-1"><p class="muted">Cargando…</p></div></main>
+</div>
+<nav class="bottom" aria-label="Secciones" id="navBottom"></nav>
+<div id="update" class="update" hidden>Hay una versión nueva de la app. <button class="btn pri" id="doUpdate">Actualizar</button></div>
+<script src="./data.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
