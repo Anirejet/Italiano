@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.1";
+const APP_VERSION = "1.3";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -14,6 +14,7 @@ const ICON = {
   chart: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5V14"/><path d="M12 17.5h.01"/>',
+  route: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a3 3 0 0 1 3-3h7M18 7v8a3 3 0 0 1-3 3H8"/>',
   more: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   speaker: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
 };
@@ -77,13 +78,13 @@ VERBS.forEach((v, vi) => {
 
 /* ---------------------------------------------------------------- estado */
 const LS = "italiano.app.v1";
-const DEF = { cards: {}, days: {}, quiz: { ok: 0, n: 0 }, newDay: 0, newCount: 0, lastCh: 0, lastBackup: 0, plan: { day: 0, verb: 0, read: false, phr: [] },
+const DEF = { cards: {}, days: {}, quiz: { ok: 0, n: 0 }, newDay: 0, newCount: 0, lastCh: 0, lastBackup: 0, plan: { day: 0, verb: 0, read: false, phr: [], unit: false }, route: { best: {}, errs: [] },
   set: { rate: 0.9, newPerDay: 20, dir: "it", auto: true, pron: true, voice: "", theme: "auto" }, upd: 0 };
 function fresh() { return JSON.parse(JSON.stringify(DEF)); }
 function hydrate(o) { const s = Object.assign(fresh(), o || {}); s.set = Object.assign({}, DEF.set, (o || {}).set); s.plan = Object.assign({}, DEF.plan, (o || {}).plan); s.quiz = Object.assign({}, DEF.quiz, (o || {}).quiz); return s; }
 let S = (() => { try { return hydrate(JSON.parse(localStorage.getItem(LS))); } catch (e) { return fresh(); } })();
 function save() { S.upd = Date.now(); try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { toast("No se ha podido guardar el progreso."); } }
-function plan() { const t = today(); if (S.plan.day !== t) S.plan = { day: t, verb: 0, read: false, phr: [] }; return S.plan; }
+function plan() { const t = today(); if (S.plan.day !== t) S.plan = { day: t, verb: 0, read: false, phr: [], unit: false }; return S.plan; }
 function logActivity(n = 1) { const t = today(); S.days[t] = (S.days[t] || 0) + n; }
 function merge(a, b) {
   const out = hydrate(JSON.parse(JSON.stringify(a.upd >= b.upd ? a : b)));
@@ -169,14 +170,15 @@ function grade(id, g) {
 function streak() { let t = today(), n = 0; if (!S.days[t]) t--; while (S.days[t]) { n++; t--; } return n; }
 
 /* ---------------------------------------------------------------- navegación */
-const NAV = [["home", "Hoy", "home"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
+const NAV = [["home", "Hoy", "home"], ["route", "Ruta por niveles", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
   ["verbs", "Verbos", "verbs"], ["travel", "Viaje", "plane"], ["manual", "Manual", "book"], ["progress", "Progreso", "chart"],
   ["settings", "Ajustes", "gear"], ["help", "Ayuda", "help"]];
-const BOTTOM = [["home", "Hoy", "home"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["verbs", "Verbos", "verbs"], ["more", "Más", "more"]];
+const BOTTOM = [["home", "Hoy", "home"], ["route", "Ruta", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["more", "Más", "more"]];
 let curView = "home", params = {};
 function nav() {
-  const cur = k => (curView === k || (k === "more" && !BOTTOM.some(b => b[0] === curView))) ? 'aria-current="page"' : "";
-  $("#navSide").innerHTML = NAV.map(([k, l, ic]) => `<button class="navbtn" data-go="${k}" ${curView === k ? 'aria-current="page"' : ""}>${svg(ic)}${l}</button>`).join("");
+  const alias = { unit: "route", uex: "route", uerr: "route" }; const cv = alias[curView] || curView;
+  const cur = k => (cv === k || (k === "more" && !BOTTOM.some(b => b[0] === cv))) ? 'aria-current="page"' : "";
+  $("#navSide").innerHTML = NAV.map(([k, l, ic]) => `<button class="navbtn" data-go="${k}" ${cv === k ? 'aria-current="page"' : ""}>${svg(ic)}${l}</button>`).join("");
   $("#navBottom").innerHTML = BOTTOM.map(([k, l, ic]) => `<button class="navbtn" data-go="${k}" ${cur(k)}>${svg(ic)}${l}</button>`).join("");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go, b.dataset.p ? JSON.parse(b.dataset.p) : {}); });
@@ -205,13 +207,16 @@ VIEWS.home = () => {
   const dueW = dueList("w").length, dueF = dueList("f").length, nw = newAvailable();
   const reviewDone = dueW + dueF === 0 && (nw === 0 || Object.keys(S.cards).length >= DICT.length);
   const phrs = todaysPhrases(); const heard = phrs.filter(x => p.phr.includes(x.id)).length;
-  const vd = verbOfDay(); const ch = DATA.ch[Math.min(S.lastCh, DATA.ch.length - 1)];
+  const vd = verbOfDay(); const vgoal = Math.min(6, vd.v.T[vd.tense].filter(Boolean).length); const ch = DATA.ch[Math.min(S.lastCh, DATA.ch.length - 1)];
   const tasks = [
     [reviewDone, "1 · Repaso de vocabulario", dueW + dueF ? `${dueW + dueF} tarjetas pendientes y ${nw} palabras nuevas disponibles.` : nw ? `${nw} palabras nuevas para hoy.` : "Todo repasado por hoy.", "review", "Empezar"],
     [heard >= 5, "2 · Frases para el viaje", `5 frases del día · escuchadas ${heard} de 5. Repítelas en voz alta.`, "travel", "Escuchar", { today: 1 }],
-    [p.verb >= 6, `3 · Verbo del día: ${vd.v.inf}`, `${vd.tense} · ${p.verb >= 6 ? "hecho" : "escribe sus formas (aciertos: " + p.verb + " de 6)"}.`, "drill", "Practicar", { vi: vd.vi, t: vd.tense }],
+    [p.verb >= vgoal, `3 · Verbo del día: ${vd.v.inf}`, `${vd.tense} · ${p.verb >= vgoal ? "hecho" : "escribe sus formas (aciertos: " + p.verb + " de " + vgoal + ")"}.`, "drill", "Practicar", { vi: vd.vi, t: vd.tense }],
     [p.read, "4 · Lectura del manual", `${ch.title}. Lee un apartado y escucha los ejemplos.`, "manual", "Leer", { c: Math.min(S.lastCh, DATA.ch.length - 1) }],
   ];
+  const nu = typeof nextUnitIndex === "function" ? nextUnitIndex() : -1;
+  if (nu >= 0) tasks.splice(0, 0, [!!p.unit, `1 · Ruta: unidad ${nu + 1}`, `${UNITS[nu].t}. Explicación, ejemplos y ejercicios.`, "unit", "Empezar", { u: nu }]);
+  tasks.forEach((t, k) => { t[1] = t[1].replace(/^\d+ · /, (k + 1) + " · "); });
   const doneN = tasks.filter(x => x[0]).length;
   const w = DICT[(today() * 7919) % DICT.length];
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent); const standalone = window.navigator.standalone || matchMedia("(display-mode: standalone)").matches;
@@ -222,7 +227,7 @@ VIEWS.home = () => {
   <div class="list" style="padding:0">${tasks.map(([d, t, desc, view, label, pp]) => `<div class="task ${d ? "done" : ""}"><div class="ck">${d ? "✓" : ""}</div>
     <div class="grow"><div class="t">${esc(t)}</div><div class="muted small">${esc(desc)}</div></div>
     <button class="btn ${d ? "" : "pri"}" data-go="${view}" ${pp ? `data-p='${JSON.stringify(pp)}'` : ""}>${d ? "Repetir" : label}</button></div>`).join("")}
-    <div class="task"><div class="ck"></div><div class="grow"><div class="t">5 · Ruta por niveles</div><div class="muted small">Llegará en la próxima actualización (unidades A1–B2 con ejercicios).</div></div></div></div>
+</div>
   <h2 class="s">Palabra del día</h2>
   <div class="hero speakable"><div class="row" style="align-items:flex-start;flex-wrap:nowrap">${sayBtn(w.it)}<div>
   <div class="word"><span class="it">${esc(w.it)}</span></div><div class="pr" style="font-size:1rem">[${esc(w.pr)}]</div>
@@ -232,7 +237,7 @@ VIEWS.home = () => {
 /* ---------------------------------------------------------------- MÁS */
 VIEWS.more = () => {
   $("#view").innerHTML = `<h1 class="v">Más</h1><div class="list menu" style="padding:0 14px">
-  ${[["practice", "Practicar", "Test, escritura, dictado, conjugación y autoevaluación", "practice"], ["travel", "Viaje y frases útiles", "Frases por situaciones con audio", "plane"],
+  ${[["verbs", "Verbos", "114 verbos conjugados con audio y práctica", "verbs"], ["practice", "Practicar", "Test, escritura, dictado, conjugación y autoevaluación", "practice"], ["travel", "Viaje y frases útiles", "Frases por situaciones con audio", "plane"],
      ["manual", "Manual", "Toda la gramática, con buscador", "book"], ["progress", "Progreso", "Estadísticas y copia de seguridad", "chart"],
      ["settings", "Ajustes y voz", "Voz italiana, velocidad, tarjetas nuevas al día", "gear"], ["help", "Ayuda", "Instalar, usar sin conexión, copias", "help"]]
     .map(([k, t, d, ic]) => `<button data-go="${k}">${svg(ic)}<span><b>${t}</b><br><span class="muted small">${d}</span></span></button>`).join("")}</div>`;
@@ -590,5 +595,4 @@ document.addEventListener("keydown", ev => {
   if (!SESSION.showing && (ev.key === " " || ev.key === "Enter")) { ev.preventDefault(); const b = $("#show"); if (b) b.click(); }
   else if (SESSION.showing && "1234".includes(ev.key)) { const b = $(`[data-g="${+ev.key - 1}"]`); if (b) b.click(); }
 });
-render();
-window.__appStarted = true;
+
