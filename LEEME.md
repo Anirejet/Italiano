@@ -13,7 +13,7 @@ se instala en el iPhone desde Safari. Una vez instalada funciona sin internet.
 1. En la página del repositorio recién creado, pulsa el enlace **uploading an existing file**
    (o *Add file → Upload files*).
 2. Descomprime el ZIP en tu ordenador y **arrastra todo el contenido de la carpeta**
-   (index.html, app.js, app.css, data.js, sw.js, manifest.webmanifest y la carpeta *icons*)
+   (index.html, app.js, app.css, data.js, route.js, sync.js, tools.js, talk.js, sw.js, manifest.webmanifest y la carpeta *icons*)
    a la zona de subida. Hazlo desde un ordenador con Chrome o Edge.
 3. Abajo, pulsa **Commit changes** y espera a que termine.
 
@@ -37,11 +37,36 @@ se instala en el iPhone desde Safari. Una vez instalada funciona sin internet.
 3. La próxima vez que abras la app con internet verás el aviso «Hay una versión nueva»: pulsa **Actualizar**.
    Tu progreso no se pierde.
 
+## 6. Sincronizar el ordenador y el móvil (opcional, una sola vez)
+El progreso se guarda en cada dispositivo. Para que sea el mismo en los dos, la app lo guarda también
+en un archivo privado (un *gist secreto*) de tu cuenta de GitHub:
+1. En github.com: tu foto (arriba a la derecha) → **Settings** → abajo del todo, **Developer settings**
+   → **Personal access tokens** → **Tokens (classic)** → **Generate new token** → **Generate new token (classic)**.
+2. *Note*: `Italiano app`. *Expiration*: la que quieras (con *No expiration* no hay que repetirlo).
+   Marca **solo** la casilla **gist** y pulsa **Generate token**. Copia el código (empieza por `ghp_`);
+   GitHub solo lo enseña una vez.
+3. En la app del ordenador: **Ajustes → Sincronizar ordenador y móvil**, pega el código y pulsa **Conectar**.
+4. Envíate el código (una nota, un correo a ti mismo) y pégalo también **dentro de la app instalada en el
+   iPhone** (abierta desde su icono, no desde Safari: la app instalada y Safari guardan sus datos por separado).
+5. Listo: se sincroniza sola al abrir, unos segundos después de cada cambio y al salir. El icono de la nube
+   de arriba indica el estado.
+
+Ese código solo permite crear y modificar gists; no da acceso a tus repositorios. No lo compartas. Si quieres
+anularlo, bórralo en la misma página de GitHub.
+
+## 7. Varios usuarios
+- **Cada uno con su móvil:** cada persona instala la app desde la misma dirección y escribe su nombre en
+  Ajustes → Usuarios. Si sincronizáis con la misma cuenta de GitHub, al conectar cada uno elige
+  **«Crear el mío»** (o su progreso, si ya existe). Nunca elijáis el progreso de otra persona.
+- **Un dispositivo compartido:** Ajustes → Usuarios → Añadir usuario (hasta 5). La app preguntará quién va
+  a estudiar al abrirla (se puede desactivar). Cada usuario conecta su sincronización por separado; si ya hay
+  otro usuario conectado en ese dispositivo, aparece un botón para usar la misma cuenta de GitHub.
+
 ## Notas
-- El repositorio es público: cualquiera con la dirección puede ver la app, pero **tu progreso solo
-  está en tu teléfono** y nadie más puede verlo.
+- El repositorio es público: cualquiera con la dirección puede ver la app, pero **tu progreso** solo está
+  en tus dispositivos y, si sincronizas, en un gist secreto de tu cuenta.
 - Haz de vez en cuando una copia de seguridad en la app (Ajustes → Guardar copia), por ejemplo en
-  iCloud Drive o en Archivos. Sirve también para pasar tu progreso al ordenador.
+  iCloud Drive o en Archivos.
 - Para probarla en el ordenador sin publicarla, basta con abrir `index.html` con Chrome o Edge
   (en ese modo no funciona sin conexión ni se puede instalar, pero sí todo lo demás).
 

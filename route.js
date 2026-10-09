@@ -2,7 +2,7 @@
 /* ================================================================ RUTA POR NIVELES */
 const UNITS = DATA.units || [];
 const PASS = 75;
-function RT() { if (!S.route) S.route = { best: {}, errs: [] }; if (!S.route.errs) S.route.errs = []; return S.route; }
+function RT() { if (!S.route) S.route = { best: {}, errs: [], ed: {} }; if (!S.route.errs) S.route.errs = []; if (!S.route.ed) S.route.ed = {}; return S.route; }
 function unitUnlocked(i) { if (S.set.unlockAll || i === 0) return true; return (RT().best[UNITS[i - 1].id] || 0) >= PASS; }
 function nextUnitIndex() { for (let i = 0; i < UNITS.length; i++) if ((RT().best[UNITS[i].id] || 0) < PASS) return i; return -1; }
 const LVLNAME = { A1: "A1 · Acceso", A2: "A2 · Plataforma", B1: "B1 · Umbral", B2: "B2 · Avanzado" };
@@ -44,15 +44,16 @@ let UX = null;
 function startUnitEx(i) {
   const u = UNITS[i];
   UX = { mode: "unit", ui: i, items: u.x.map((x, xi) => ({ ui: i, xi, x })), i: 0, ok: 0, st: {} };
-  curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
+  pushHist(); curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
 }
 function startErrEx() {
   const items = RT().errs.map(e => { const ui = UNITS.findIndex(u => u.id === e.u); return ui >= 0 && UNITS[ui].x[e.x] ? { ui, xi: e.x, x: UNITS[ui].x[e.x] } : null; }).filter(Boolean);
   if (!items.length) { toast("No tienes errores pendientes."); go("route"); return; }
   UX = { mode: "errs", items: shuffle(items).slice(0, 20), i: 0, ok: 0, st: {} };
-  curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
+  pushHist(); curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
 }
-VIEWS.uex = () => { if (!UX) { go("route"); return; } drawEx(); };
+VIEWS.uex = () => { if (!UX) { go("route", {}, { replace: true }); return; } drawEx(); };
+VIEWS.uresult = () => go("route", {}, { replace: true });
 VIEWS.uerr = () => {
   const errs = RT().errs;
   $("#view").innerHTML = `<button class="back" data-go="route">← Ruta</button><h1 class="v">Mis errores</h1>
@@ -64,8 +65,8 @@ VIEWS.uerr = () => {
 const fiNorm = s => String(s).toLowerCase().replace(/[’`]/g, "'").replace(/[.,;:!?¡¿«»"]/g, "").replace(/\s+/g, " ").trim();
 const tokens = s => fiNorm(s).split(" ").filter(Boolean);
 
-function addErr(it) { const e = RT().errs; const id = UNITS[it.ui].id; if (!e.some(x => x.u === id && x.x === it.xi)) e.push({ u: id, x: it.xi }); }
-function delErr(it) { const id = UNITS[it.ui].id; RT().errs = RT().errs.filter(x => !(x.u === id && x.x === it.xi)); }
+function addErr(it) { const e = RT().errs; const id = UNITS[it.ui].id; const old = e.find(x => x.u === id && x.x === it.xi); if (old) old.t = Date.now(); else e.push({ u: id, x: it.xi, t: Date.now() }); }
+function delErr(it) { const id = UNITS[it.ui].id; RT().errs = RT().errs.filter(x => !(x.u === id && x.x === it.xi)); RT().ed[id + "|" + it.xi] = Date.now(); }
 
 function exResult(ok, html, say) {
   const it = UX.items[UX.i];
@@ -112,7 +113,7 @@ function drawEx() {
     <button class="btn pri big wide" id="unext" style="margin-top:14px">${UX.i + 1 < UX.items.length ? "Siguiente" : "Ver resultado"}</button>` : "";
   $("#view").innerHTML = head + body + fb;
 
-  $("#uquit").onclick = () => { const m = UX.mode, ui = UX.ui; UX = null; if (m === "unit") go("unit", { u: ui }); else go("route"); };
+  $("#uquit").onclick = () => { UX = null; if (HIST.length) goBack(); else go("route", {}, { replace: true }); };
   if (st.done) { $("#unext").onclick = nextEx; return; }
   if (x.k === "ch") $("#view").querySelectorAll("[data-k]").forEach(b => b.onclick = () => {
     st.pick = +b.dataset.k; const ok = st.pick === x.a; exResult(ok, `${ok ? "<b>Corretto!</b> " : "<b>No.</b> "}${x.w}`, x.say);
@@ -175,7 +176,7 @@ function nextEx() {
     html = `<h1 class="v">Repaso terminado</h1><div class="stats"><div class="stat"><b>${UX.ok} / ${UX.items.length}</b><span>aciertos</span></div><div class="stat"><b>${RT().errs.length}</b><span>errores pendientes</span></div></div>
     <div class="row" style="margin-top:14px">${RT().errs.length ? `<button class="btn pri" data-go="uerr">Seguir repasando</button>` : ""}<button class="btn" data-go="route">Ver la ruta</button></div>`;
   }
-  UX = null; curView = "route"; nav(); $("#view").innerHTML = html; window.scrollTo(0, 0);
+  UX = null; curView = "uresult"; params = {}; nav(); $("#view").innerHTML = html; window.scrollTo(0, 0);
 }
 
 /* arranque (después de cargar la ruta) */
