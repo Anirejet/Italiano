@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -61,6 +61,23 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 const pick = (arr, seed) => arr[((seed % arr.length) + arr.length) % arr.length];
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2800); }
 
+/* ---------------------------------------------------------------- carga de partes grandes solo cuando hacen falta */
+const LOADED = {};
+function loadScript(src) {
+  if (LOADED[src]) return LOADED[src];
+  LOADED[src] = new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete LOADED[src]; rej(new Error("No se ha podido cargar " + src)); }; document.head.appendChild(s); });
+  return LOADED[src];
+}
+async function needManual() { if (!window.MANUAL_HTML) await loadScript("./manual.js"); window.MANUAL_HTML.forEach((h, i) => { if (DATA.ch[i]) DATA.ch[i].html = h; }); }
+async function needContent() { if (!window.CONTENT) await loadScript("./content.js"); return window.CONTENT; }
+/* Pinta «Cargando…» y vuelve a dibujar la vista cuando llega la parte que falta. */
+function lazyView(promise) {
+  const v = curView, p = JSON.stringify(params);
+  $("#view").innerHTML = `<p class="muted" style="margin-top:30px">Cargando…</p>`;
+  promise.then(() => { if (curView === v && JSON.stringify(params) === p) { const y = window.scrollY; render(); window.scrollTo(0, y); } })
+    .catch(e => { $("#view").innerHTML = `<p class="note err">${esc(e.message)}. Comprueba la conexión la primera vez que abras esta sección.</p>`; });
+}
+
 /* ---------------------------------------------------------------- datos */
 const PERSONS = ["io", "tu", "lui / lei / Lei", "noi", "voi", "loro"];
 const TENSES = DATA.tenses;
@@ -92,14 +109,14 @@ const profName = pr => (pr && pr.name) || ("Usuario " + (PROF.list.indexOf(pr) +
 function saveProf() { try { localStorage.setItem("italiano.profiles", JSON.stringify(PROF)); } catch (e) {} }
 function switchProfile(id) { PROF.cur = id; saveProf(); try { sessionStorage.setItem("italiano.picked", "1"); } catch (e) {} location.reload(); }
 const DEF = { cards: {}, days: {}, quiz: { ok: 0, n: 0 }, newDay: 0, newCount: 0, lastCh: 0, lastChT: 0, lastBackup: 0, plan: { day: 0, verb: 0, read: false, phr: [], unit: false }, route: { best: {}, errs: [], ed: {} },
-  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, resetAt: 0,
+  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, rd: {}, ex: {}, ucards: {}, resetAt: 0,
   set: { rate: 0.9, newPerDay: 20, dir: "it", auto: true, pron: true, voice: "", theme: "auto", fs: 1 }, upd: 0 };
 function fresh() { return JSON.parse(JSON.stringify(DEF)); }
 function hydrate(o) {
   o = o || {}; const s = Object.assign(fresh(), o); Object.keys(s).forEach(k => { if (k[0] === "_") delete s[k]; });
   s.set = Object.assign({}, DEF.set, o.set); s.plan = Object.assign({}, DEF.plan, o.plan); s.quiz = Object.assign({}, DEF.quiz, o.quiz);
   s.route = Object.assign({ best: {}, errs: [], ed: {} }, o.route); if (!s.route.ed) s.route.ed = {}; if (!s.route.errs) s.route.errs = [];
-  ["fav", "notes", "pos", "qd", "cards", "days", "conv"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
+  ["fav", "notes", "pos", "qd", "cards", "days", "conv", "rd", "ex", "ucards"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
   return s;
 }
 /* Cada dispositivo tiene un identificador propio (no se sincroniza): sirve para sumar bien los aciertos de varios dispositivos. */
@@ -134,6 +151,8 @@ function merge(a, b) {
   out.quiz = out.qd[DEV] ? { ok: out.qd[DEV].ok, n: out.qd[DEV].n } : { ok: 0, n: 0 };
   for (const key of ["fav"]) { out[key] = {}; for (const src of [a, b]) for (const [k, t] of Object.entries(src[key])) if (after(Math.abs(t)) && Math.abs(t) > Math.abs(out[key][k] || 0)) out[key][k] = t; }
   out.notes = {}; for (const src of [a, b]) for (const [k, n] of Object.entries(src.notes)) if (after(n.t) && (!out.notes[k] || n.t > out.notes[k].t)) out.notes[k] = n;
+  for (const key of ["rd", "ex"]) { out[key] = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src[key])) if (after(c.t) && (!out[key][k] || (c.best || 0) > (out[key][k].best || 0) || ((c.best || 0) === (out[key][k].best || 0) && c.t > out[key][k].t))) out[key][k] = c; }
+  out.ucards = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.ucards)) if (after(c.t) && (!out.ucards[k] || c.t > out.ucards[k].t)) out.ucards[k] = c;
   out.conv = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.conv)) if (after(c.t) && (!out.conv[k] || c.best > out.conv[k].best || (c.best === out.conv[k].best && c.t > out.conv[k].t))) out.conv[k] = c;
   out.pos = {}; for (const src of [a, b]) for (const [k, p] of Object.entries(src.pos)) if (!out.pos[k] || (p.t || 0) > (out.pos[k].t || 0)) out.pos[k] = p;
   const nb = (b.lastChT || 0) > (a.lastChT || 0); out.lastCh = nb ? b.lastCh : a.lastCh; out.lastChT = Math.max(a.lastChT || 0, b.lastChT || 0);
@@ -257,14 +276,15 @@ function streak() { let t = today(), n = 0; if (!S.days[t]) t--; while (S.days[t
 
 /* ---------------------------------------------------------------- navegación */
 const NAV = [["home", "Hoy", "home"], ["route", "Ruta por niveles", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
-  ["talk", "Conversar", "mic"], ["translate", "Traducir", "translate"], ["saved", "Guardadas", "star"],
+  ["talk", "Conversar", "mic"], ["ai", "IA del dispositivo", "chat"], ["translate", "Traducir", "translate"], ["read", "Lecturas", "book"], ["exam", "Exámenes EOI", "cards"],
+  ["kitchen", "Cocina profesional", "practice"], ["saved", "Guardadas", "star"],
   ["verbs", "Verbos", "verbs"], ["travel", "Viaje", "plane"], ["manual", "Manual", "book"], ["progress", "Progreso", "chart"],
   ["settings", "Ajustes", "gear"], ["help", "Ayuda", "help"]];
 const BOTTOM = [["home", "Hoy", "home"], ["route", "Ruta", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["more", "Más", "more"]];
 let curView = "home", params = {};
-const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings" };
+const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings", pron: "practice", dictation: "practice", cards: "travel" };
 const TITLES = Object.fromEntries(NAV.map(([k, l]) => [k, l]));
-Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces" });
+Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces", ai: "IA del dispositivo", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", cards: "Tarjetas", pron: "Pronunciación", dictation: "Dictado" });
 function nav() {
   const cv = ALIAS[curView] || curView;
   const cur = k => (cv === k || (k === "more" && !BOTTOM.some(b => b[0] === cv))) ? 'aria-current="page"' : "";
@@ -363,6 +383,7 @@ VIEWS.home = () => {
     <div class="grow"><div class="t">${esc(t)}</div><div class="muted small">${esc(desc)}</div></div>
     <button class="btn ${d ? "" : "pri"}" data-go="${view}" ${pp ? `data-p='${JSON.stringify(pp)}'` : ""}>${d ? "Repetir" : label}</button></div>`).join("")}
 </div>
+  <h2 class="s">Más práctica</h2><div class="chips">${[["talk", "Conversar"], ["ai", "IA del dispositivo"], ["read", "Lecturas"], ["dictation", "Dictado"], ["pron", "Pronunciación"], ["exam", "Exámenes EOI"], ["kitchen", "Cocina"]].map(([k, l]) => `<button class="chip" data-go="${k}">${l}</button>`).join("")}</div>
   <h2 class="s">Palabra del día</h2>
   <div class="hero speakable"><div class="row" style="align-items:flex-start;flex-wrap:nowrap">${sayBtn(w.it)}<div>
   <div class="word"><span class="it">${esc(w.it)}</span></div><div class="pr" style="font-size:1rem">[${esc(w.pr)}]</div>
@@ -373,7 +394,10 @@ VIEWS.home = () => {
 /* ---------------------------------------------------------------- MÁS */
 VIEWS.more = () => {
   $("#view").innerHTML = `<h1 class="v">Más</h1><div class="list menu" style="padding:0 14px">
-  ${[["talk", "Conversar", "Habla en voz alta en situaciones reales y la app te entiende; y conversación libre con IA", "mic"], ["translate", "Traducir frases", "Frases enteras español ↔ italiano, con audio y análisis palabra por palabra", "translate"], ["saved", "Guardadas y mis frases", "Tus palabras con estrella y las frases que has guardado", "star"],
+  ${[["talk", "Conversar", "Habla en voz alta en situaciones reales y la app te entiende", "mic"], ["ai", "IA del dispositivo", "Conversación libre, gratis y sin internet", "chat"],
+     ["read", "Lecturas", "Textos con audio y preguntas, de A2 a B2", "book"], ["exam", "Exámenes tipo EOI", "Simulacros A2 y B1 con la estructura oficial de Andalucía", "cards"],
+     ["kitchen", "Cocina profesional", "Recetas tradicionales, técnicas y los 14 alérgenos", "practice"], ["cards", "Tarjetas para enseñar", "Celíaco, alergias, taxi, médico… en grande", "plane"],
+     ["pron", "Pronunciación", "Escucha, repite y mira qué palabras se entienden", "mic"], ["dictation", "Dictado", "Escucha y escribe; corrección palabra a palabra", "practice"], ["translate", "Traducir frases", "Frases enteras español ↔ italiano, con audio y análisis palabra por palabra", "translate"], ["saved", "Guardadas y mis frases", "Tus palabras con estrella y las frases que has guardado", "star"],
      ["verbs", "Verbos", "114 verbos conjugados con audio y práctica", "verbs"], ["practice", "Practicar", "Test, escritura, dictado, conjugación y autoevaluación", "practice"], ["travel", "Viaje y frases útiles", "Frases por situaciones con audio", "plane"],
      ["manual", "Manual", "Toda la gramática, con buscador", "book"], ["progress", "Progreso", "Estadísticas y copia de seguridad", "chart"],
      ["settings", "Ajustes, voz y sincronización", "Voz, tamaño de letra, sincronizar ordenador y móvil", "gear"], ["help", "Ayuda", "Instalar, usar sin conexión, copias", "help"]]
@@ -557,9 +581,10 @@ VIEWS.practice = () => {
   <label class="muted" for="pcat">Tema</label><div style="margin:6px 0 16px"><select id="pcat"><option value="">Todos los temas</option><option value="__viaje" ${params.cat === "__viaje" ? "selected" : ""}>★ Frases de viaje (solo test)</option>${CATS.map(c => `<option ${params.cat === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
   <div class="list">${[["mcq", "Elige la traducción", "Ves la palabra italiana y eliges entre cuatro opciones."], ["mcqes", "Elige la palabra italiana", "Ves el español y eliges la forma italiana."],
     ["write", "Escríbela en italiano", "Ves el español y escribes la palabra en italiano."], ["listen", "Dictado", "Escuchas una palabra y la escribes."],
-    ["conj", "Conjugación", "Escribes la forma verbal que se pide."], ["self", "Autoevaluación del manual", "Las 30 preguntas del capítulo 21, con su solución."]]
+    ["conj", "Conjugación", "Escribes la forma verbal que se pide."], ["self", "Autoevaluación del manual", "Las 30 preguntas del capítulo 21, con su solución."],
+    ["go:pron", "Pronunciación", "Escuchas una frase, la repites en voz alta y ves qué palabras se entienden."], ["go:dictation", "Dictado", "Escuchas frases y las escribes; corrección palabra a palabra."]]
     .map(([k, t, d]) => `<div class="entry"><div class="grow"><b>${t}</b><div class="muted small">${d}</div></div><button class="btn pri" data-mode="${k}">Empezar</button></div>`).join("")}</div>`;
-  $("#view").querySelectorAll("[data-mode]").forEach(b => b.onclick = () => startPractice(b.dataset.mode, $("#pcat").value));
+  $("#view").querySelectorAll("[data-mode]").forEach(b => b.onclick = () => b.dataset.mode.indexOf("go:") === 0 ? go(b.dataset.mode.slice(3)) : startPractice(b.dataset.mode, $("#pcat").value));
 };
 function startPractice(mode, cat, opts = {}) {
   params.cat = cat;
@@ -689,7 +714,7 @@ VIEWS.travel = () => {
   const g = params.g || GROUPS[0];
   $("#view").innerHTML = `<h1 class="v">Viaje y frases útiles</h1><p class="sub">Frases para desenvolverte en Italia, con audio normal y lento. Toca una situación.</p>
   <div class="chips">${GROUPS.map(x => `<button class="chip" aria-pressed="${x === g}" data-g="${esc(x)}">${esc(x)}</button>`).join("")}</div>
-  <div class="row" style="margin-top:14px"><button class="btn pri" data-go="review" data-p='${JSON.stringify({ group: g, deck: "f" })}'>Repasar estas frases</button></div>
+  <div class="row" style="margin-top:14px"><button class="btn pri" data-go="review" data-p='${JSON.stringify({ group: g, deck: "f" })}'>Repasar estas frases</button><button class="btn" data-go="pron" data-p='{"s":"viaje"}'>Practicar la pronunciación</button><button class="btn" data-go="cards">Tarjetas para enseñar</button><button class="btn" data-go="talk">Conversaciones</button></div>
   <div class="list" style="margin-top:14px">${PHR.filter(p => p.g === g).map(p => entryHTML(p, { phr: true, slow: true, meta: false })).join("")}</div>`;
   $("#view").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { params.g = b.dataset.g; VIEWS.travel(); });
 };
@@ -728,6 +753,7 @@ function highlight(root, q) {
   return marks;
 }
 VIEWS.manual = () => {
+  if (!DATA.ch[0].html) { lazyView(needManual()); return; }
   if (params.c != null) {
     const ci = params.c; const c = DATA.ch[ci]; S.lastCh = ci; S.lastChT = Date.now(); plan().read = true; logActivity(); save();
     $("#view").innerHTML = `<div class="rprog"><i id="rprog"></i></div><button class="back" data-go="manual">← Índice del manual</button><h1 class="v">${esc(c.title)}</h1>
@@ -820,6 +846,7 @@ VIEWS.settings = () => {
   <label for="theme">Aspecto</label><select id="theme">${[["auto", "Como el teléfono"], ["light", "Claro"], ["dark", "Oscuro"]].map(([k, l]) => `<option value="${k}" ${S.set.theme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
   ${typeof profilesHTML === "function" ? profilesHTML() : ""}
   ${typeof syncSettingsHTML === "function" ? syncSettingsHTML() : ""}
+  ${typeof reminderHTML === "function" ? reminderHTML() : ""}
   <h2 class="s">Copia de seguridad</h2>
   <p class="muted small">Además de la sincronización, puedes guardar una copia en un archivo (por ejemplo en Archivos o iCloud Drive) y recuperarla cuando quieras: se une con lo que ya tengas, no lo borra.${S.lastBackup ? " Última copia: " + new Date(S.lastBackup).toLocaleDateString("es-ES") + "." : ""}</p>
   <div class="row"><button class="btn pri" id="exp">Guardar copia</button><button class="btn" id="imp">Recuperar copia</button><input type="file" id="impf" accept="application/json,.json" hidden></div>
@@ -833,6 +860,7 @@ VIEWS.settings = () => {
   $("#fs").onchange = e => { S.set.fs = +e.target.value; save(); applyTheme(); };
   if (typeof bindSyncSettings === "function") bindSyncSettings();
   if (typeof bindProfiles === "function") bindProfiles();
+  if (typeof bindReminder === "function") bindReminder();
   $("#exp").onclick = exportBackup;
   $("#imp").onclick = () => $("#impf").click();
   $("#impf").onchange = e => { if (e.target.files[0]) importBackup(e.target.files[0]); };
@@ -860,6 +888,10 @@ VIEWS.help = () => {
   <li>La app comprueba que en tu respuesta están las palabras importantes. Si falta algo, te dice qué y puedes repetir o ver la respuesta modelo con audio.</li>
   <li>El reconocimiento de voz necesita internet y lo hace el navegador: en el ordenador, Chrome o Edge; en el iPhone, <b>Safari</b>. En la app instalada del iPhone Apple todavía no lo permite: ahí usa el <b>dictado del teclado</b> (añade el teclado italiano en Ajustes → General → Teclado → Teclados, y pulsa el micrófono del teclado).</li>
   <li>Para hablar de cualquier tema, «Conversación libre con una IA» te da unas instrucciones listas para copiar en una app de IA con voz.</li></ul>
+  <h2 class="s">La IA del dispositivo</h2><p>En <b>IA del dispositivo</b> eliges un modelo, se descarga una vez (de 0,9 a 5 GB según el modelo) y conversas de lo que quieras: hace de camarero, chef, farmacéutico o amigo y te corrige. Funciona sin internet y lo que escribes no sale del dispositivo. Necesita WebGPU: Chrome o Edge actualizados en el ordenador, o iOS 26 o posterior en el iPhone. Son modelos pequeños: a veces se equivocan al corregir.</p>
+  <h2 class="s">Lecturas, dictado y pronunciación</h2><p><b>Lecturas</b>: 15 textos de A2 a B2 con audio frase a frase, traducción y preguntas. <b>Dictado</b>: escuchas y escribes; verde = bien, amarillo = acento o casi, rojo = mal o falta. <b>Pronunciación</b>: repites una frase y ves qué palabras se han entendido.</p>
+  <h2 class="s">Exámenes tipo EOI</h2><p>Simulacros A2 y B1 con la estructura de las pruebas de certificación de Andalucía: comprensión oral (cada audio dos veces), comprensión escrita, expresión escrita (con contador de palabras, modelo y autoevaluación; o corrección con la IA del dispositivo) y expresión oral (puedes grabarte y escucharte).</p>
+  <h2 class="s">Cocina, tarjetas, prueba de nivel y recordatorio</h2><p><b>Cocina profesional</b>: 10 recetas tradicionales en versión canónica, con audio, vocabulario y los 14 alérgenos en italiano. <b>Tarjetas</b>: frases para enseñar en grande (celíaco, alergias, taxi…), y puedes crear las tuyas. <b>Prueba de nivel</b> (en Ruta): te sitúa en la unidad adecuada. <b>Recordatorio</b> (en Ajustes): crea un evento diario en el calendario del móvil.</p>
   <h2 class="s">Voces</h2><p>En <b>Ajustes → Elegir y probar voces</b> ves las voces italianas del dispositivo, puedes probarlas con la misma frase y quedarte con la que mejor suene. Ahí mismo están los pasos para descargar más voces en iPhone, Windows, Mac y Android.</p>
   <h2 class="s">Varios usuarios</h2><p>En <b>Ajustes → Usuarios</b> puedes crear hasta 5 usuarios en el mismo dispositivo; cada uno con su progreso y su sincronización. Si cada persona usa su propio móvil, basta con que escriba su nombre. Varias personas pueden usar la misma cuenta de GitHub para sincronizar: al conectar, cada una elige o crea <b>su</b> progreso.</p>
   <h2 class="s" id="h-sync">Sincronizar el ordenador y el móvil</h2>
@@ -895,7 +927,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     reg.addEventListener("updatefound", () => { const w = reg.installing; w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) show(w); }); });
   }).catch(() => {});
   let reloaded = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  const hadCtrl = !!navigator.serviceWorker.controller;   /* la primera instalación no recarga la página */
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadCtrl && !reloaded) { reloaded = true; location.reload(); } });
 }
 document.addEventListener("keydown", ev => {
   if (curView !== "review" || !SESSION || !SESSION.q.length || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;

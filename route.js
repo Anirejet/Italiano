@@ -14,7 +14,7 @@ VIEWS.route = () => {
   $("#view").innerHTML = `<h1 class="v">Ruta por niveles</h1>
   <p class="sub">${passed} de ${UNITS.length} unidades superadas. Cada unidad tiene una explicación breve, ejemplos con audio y ejercicios; con un ${PASS}% de aciertos se desbloquea la siguiente.</p>
   <div class="row" style="margin-bottom:8px">${nx >= 0 ? `<button class="btn pri" data-go="unit" data-p='{"u":${nx}}'>${passed ? "Continuar" : "Empezar"}: unidad ${nx + 1}</button>` : ""}
-  ${r.errs.length ? `<button class="btn" data-go="uerr">Repasar mis errores (${r.errs.length})</button>` : ""}</div>
+  ${r.errs.length ? `<button class="btn" data-go="uerr">Repasar mis errores (${r.errs.length})</button>` : ""}<button class="btn" id="placeGo">Prueba de nivel</button></div>
   ${lvls.map(l => `<h2 class="s">${esc(LVLNAME[l] || l)}</h2><div class="list" style="padding:0">${UNITS.map((u, i) => [u, i]).filter(([u]) => u.lvl === l).map(([u, i]) => {
     const best = r.best[u.id]; const ok = (best || 0) >= PASS; const open = unitUnlocked(i);
     return `<div class="task ${ok ? "done" : ""}" style="${open ? "" : "opacity:.55"}"><div class="ck">${ok ? "✓" : i + 1}</div>
@@ -22,6 +22,7 @@ VIEWS.route = () => {
     ${open ? `<button class="btn ${ok ? "" : "pri"}" data-go="unit" data-p='{"u":${i}}'>${ok ? "Repasar" : best != null ? "Repetir" : "Abrir"}</button>` : `<span class="muted small" aria-label="Bloqueada">🔒</span>`}</div>`;
   }).join("")}</div>`).join("")}
   <div class="row" style="margin-top:22px"><label class="muted small" for="ula" style="flex:1">Desbloquear todas las unidades (para saltar a la que quieras)</label><input type="checkbox" id="ula" ${S.set.unlockAll ? "checked" : ""} style="width:24px;height:24px"></div>`;
+  $("#placeGo").onclick = startPlacement;
   $("#ula").onchange = e => { S.set.unlockAll = e.target.checked; save(); VIEWS.route(); };
 };
 
@@ -71,7 +72,8 @@ function delErr(it) { const id = UNITS[it.ui].id; RT().errs = RT().errs.filter(x
 function exResult(ok, html, say) {
   const it = UX.items[UX.i];
   UX.st.done = true; UX.st.ok = ok; UX.st.fb = html;
-  if (ok) { UX.ok++; if (UX.mode === "errs") delErr(it); } else addErr(it);
+  if (UX.mode === "place") { UX.hist.push(ok); if (ok) UX.ok++; }
+  else if (ok) { UX.ok++; if (UX.mode === "errs") delErr(it); } else addErr(it);
   S.quiz.n++; if (ok) S.quiz.ok++; logActivity(); save();
   drawEx(); if (say) speak(say);
 }
@@ -80,8 +82,8 @@ function drawEx() {
   const it = UX.items[UX.i]; const x = it.x; const st = UX.st;
   const u = UNITS[it.ui];
   const head = `<div class="row" style="justify-content:space-between"><button class="back" id="uquit">← Salir</button>
-    <span class="muted small">${UX.mode === "errs" ? "Repaso de errores" : "Unidad " + (it.ui + 1)} · ${UX.i + 1} / ${UX.items.length}</span></div>
-    <div class="bar" style="margin-bottom:14px"><i style="width:${Math.round(100 * UX.i / UX.items.length)}%"></i></div>`;
+    <span class="muted small">${UX.mode === "errs" ? "Repaso de errores" : UX.mode === "place" ? "Prueba de nivel · " + esc(u.lvl) : "Unidad " + (it.ui + 1)} · ${UX.i + 1}${UX.mode === "place" ? "" : " / " + UX.items.length}</span></div>
+    <div class="bar" style="margin-bottom:14px"><i style="width:${Math.round(100 * UX.i / UX.items.length)}%"></i></div>${UX.mode === "place" ? `<p class="muted small">Si no sabes la respuesta, pulsa «No lo sé» o elige la que te parezca: la prueba se detiene sola cuando llega a tu nivel.</p>` : ""}`;
   let body = "";
   if (x.k === "ch") {
     body = `<div class="card speakable" style="min-height:120px;text-align:left"><div class="a">${x.q}</div></div>
@@ -156,6 +158,7 @@ function drawEx() {
   }
 }
 function nextEx() {
+  if (UX.mode === "place") { placementNext(); return; }
   UX.i++; UX.st = {};
   if (UX.i < UX.items.length) { drawEx(); window.scrollTo(0, 0); return; }
   const pct = Math.round(100 * UX.ok / UX.items.length);

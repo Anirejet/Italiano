@@ -110,7 +110,8 @@ VIEWS.talk = () => {
   <p class="sub">Conversaciones de la vida real. El italiano te habla, tú contestas <b>en voz alta</b> con frases completas y la app comprueba si te ha entendido. Si no hay micrófono, puedes escribir.</p>
   ${prob === "ios-pwa" ? `<p class="note">En la app instalada del iPhone, Apple no permite todavía el reconocimiento de voz de las páginas web. Tienes dos opciones: abrir la app en <b>Safari</b> (ahí sí funciona el micrófono de la app; si sincronizas, tu progreso es el mismo) o usar el dictado del teclado.<br><br>${DICTATION_TIP}</p>`
     : prob === "none" ? `<p class="note">Este navegador no tiene reconocimiento de voz: usa Chrome o Edge en el ordenador, Safari en el iPhone, o el dictado del teclado.</p>` : `<p class="muted small">El reconocimiento de voz lo hace tu navegador (Safari usa el servicio de Apple; Chrome y Edge, el de Google o Microsoft) y necesita internet.</p>`}
-  <div class="list menu" style="padding:0 14px;margin:14px 0"><button data-go="aitalk">${svg("chat")}<span><b>Conversación libre con una IA</b><br><span class="muted small">Para hablar de cualquier tema: instrucciones listas para copiar</span></span></button></div>
+  <div class="list menu" style="padding:0 14px;margin:14px 0"><button data-go="ai">${svg("chat")}<span><b>Conversación libre con la IA del dispositivo</b><br><span class="muted small">Habla de lo que quieras: gratis, sin cuenta y sin internet (tras descargarla una vez)</span></span></button>
+  <button data-go="aitalk">${svg("chat")}<span><b>Conversación libre con una app de IA</b><br><span class="muted small">Instrucciones listas para copiar en la app de Claude u otra</span></span></button></div>
   ${["A2", "B1"].map(l => lv(l).length ? `<h2 class="s">Nivel ${l}</h2><div class="list" style="padding:0">${lv(l).map(card).join("")}</div>` : "").join("")}`;
 };
 VIEWS.conv = () => {
