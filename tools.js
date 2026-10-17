@@ -149,6 +149,39 @@ async function browserTranslate(text, from, to, onProg) {
     return await tr.translate(text);
   } catch (e) { return null; }
 }
+const TR_SIT = [["viaje", "Viaje / turismo"], ["rest", "Restaurante o bar"], ["cocina", "Cocina profesional"], ["proveedor", "Proveedor / pedido"], ["correo", "Correo formal"], ["amigo", "Mensaje a un amigo"], ["menu", "Carta / menú"], ["receta", "Receta"], ["clase", "Clase / escuela"], ["salud", "Médico / farmacia"]];
+const TR_REG = [["auto", "Que lo decida el contexto"], ["tu", "Tú (informal)"], ["lei", "Usted (Lei, formal)"], ["voi", "Vosotros / grupo (voi)"], ["escrito", "Escrito formal"], ["coloquial", "Muy coloquial"]];
+function trContext() {
+  const sit = (TR_SIT.find(x => x[0] === params.sit) || [0, ""])[1], reg = (TR_REG.find(x => x[0] === (params.reg || "auto")) || [0, ""])[1];
+  return [sit && "Situación: " + sit, params.reg && params.reg !== "auto" && "Trato: " + reg, params.who && "Destinatario: " + params.who, params.note && "Indicaciones: " + params.note].filter(Boolean).join("\n");
+}
+function expertPrompt(text, from) {
+  const ctx = trContext();
+  return `Actúa como traductor profesional ${from === "es" ? "de español (España) a italiano" : "de italiano a español de España"}, con experiencia en hostelería y en la vida cotidiana en Italia.
+Traduce el texto de abajo como lo escribiría o diría un nativo en esa situación: natural, no palabra por palabra, con los conectores, tiempos verbales, fórmulas de cortesía y expresiones idiomáticas adecuados.
+${ctx ? "Contexto:\n" + ctx + "\n" : "Si el contexto no está claro, elige la opción más habitual y dímelo.\n"}
+Entrégame:
+1. La traducción final.
+2. Una alternativa (más formal o más coloquial, según convenga).
+3. Notas breves en español: decisiones importantes (registro, falsos amigos, expresiones que no se traducen literalmente).
+4. Si algo del original es ambiguo, indícalo y da la traducción para cada interpretación.
+
+Texto:
+"""
+${text}
+"""`;
+}
+async function localTranslate(text, from) {
+  const ctx = trContext();
+  const sys = `Sei un traduttore professionista ${from === "es" ? "dallo spagnolo all'italiano" : "dall'italiano allo spagnolo di Spagna"}. Traduci in modo naturale, come lo direbbe un madrelingua nella situazione indicata, non parola per parola: usa i connettivi, i tempi verbali e le formule di cortesia adeguati.
+Rispondi esattamente in questo formato, senza altro testo:
+TRADUZIONE: <la traduzione>
+ALTERNATIVA: <un'altra versione, più formale o più colloquiale>
+NOTE: <note brevissime in spagnolo sulle scelte fatte>`;
+  const r = await aiComplete([{ role: "system", content: sys }, { role: "user", content: (ctx ? ctx + "\n\n" : "") + "Testo da tradurre:\n" + text }], { req: { temperature: 0.3, max_tokens: 500 } });
+  const get = k => { const m = r.match(new RegExp(k + "\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*(TRADUZIONE|ALTERNATIVA|NOTE)\\s*:|$)", "i")); return m ? m[1].trim() : ""; };
+  return { tr: get("TRADUZIONE") || r.trim(), alt: get("ALTERNATIVA"), note: get("NOTE") };
+}
 const gUrl = (t, sl, tl) => `https://translate.google.com/?sl=${sl}&tl=${tl}&text=${encodeURIComponent(t)}&op=translate`;
 const dUrl = (t, sl, tl) => `https://www.deepl.com/translator#${sl}/${tl}/${encodeURIComponent(t.replace(/\//g, "\\/"))}`;
 
@@ -157,6 +190,12 @@ VIEWS.translate = () => {
   $("#view").innerHTML = `<h1 class="v">Traducir frases</h1>
   <p class="sub">Escribe o pega una frase en español o en italiano. Verás el italiano con audio, su pronunciación y qué significa cada palabra.</p>
   <textarea id="tt" rows="3" placeholder="¿Dónde está la estación? / Vorrei prenotare un tavolo per due…" aria-label="Texto para traducir" autocapitalize="sentences">${esc(params.t || "")}</textarea>
+  <details class="toc" ${params.ctx ? "open" : ""} id="tctx"><summary>Contexto (para traducir a medida)</summary><div style="padding:0 14px 12px">
+    <div class="muted small">Situación</div><div class="chips" style="margin:6px 0 10px">${TR_SIT.map(([k, l]) => `<button class="chip" data-tsit="${k}" aria-pressed="${(params.sit || "") === k}">${l}</button>`).join("")}</div>
+    <div class="row"><label class="muted small" for="treg">Trato</label><select id="treg" style="width:auto">${TR_REG.map(([k, l]) => `<option value="${k}" ${(params.reg || "auto") === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+    <input type="text" id="twho" data-noacc style="margin-top:8px" placeholder="¿A quién va dirigido? (p. ej. el chef, un proveedor, un amigo de 30 años)" value="${esc(params.who || "")}" autocomplete="off">
+    <input type="text" id="tnote" data-noacc style="margin-top:8px" placeholder="Algo más (p. ej. «es para un menú», «quiero sonar amable pero firme»)" value="${esc(params.note || "")}" autocomplete="off">
+  </div></details>
   <div class="row" style="margin-top:10px"><div class="seg" role="group" aria-label="Idioma">${[["auto", "Detectar"], ["es", "ES → IT"], ["it", "IT → ES"]].map(([k, l]) => `<button data-td="${k}" aria-pressed="${dir === k}">${l}</button>`).join("")}</div>
   <button class="btn pri" id="tgo">Traducir</button>${navigator.clipboard && navigator.clipboard.readText ? `<button class="btn" id="tpaste">Pegar</button>` : ""}<button class="btn" id="tclr">Borrar</button></div>
   <div id="tout" style="margin-top:16px"></div>`;
@@ -165,6 +204,10 @@ VIEWS.translate = () => {
   $("#tgo").onclick = () => { params.t = ta.value; runTranslate(true); };
   ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); params.t = ta.value; runTranslate(true); } });
   ta.addEventListener("input", () => { params.t = ta.value; });
+  $("#view").querySelectorAll("[data-tsit]").forEach(b => b.onclick = () => { params.sit = params.sit === b.dataset.tsit ? "" : b.dataset.tsit; params.ctx = 1; $("#view").querySelectorAll("[data-tsit]").forEach(x => x.setAttribute("aria-pressed", x.dataset.tsit === params.sit)); });
+  $("#treg").onchange = e => { params.reg = e.target.value; params.ctx = 1; };
+  $("#twho").oninput = e => { params.who = e.target.value; params.ctx = 1; };
+  $("#tnote").oninput = e => { params.note = e.target.value; params.ctx = 1; };
   $("#tclr").onclick = () => { ta.value = ""; params.t = ""; $("#tout").innerHTML = ""; ta.focus(); };
   if ($("#tpaste")) $("#tpaste").onclick = async () => { try { ta.value = await navigator.clipboard.readText(); params.t = ta.value; runTranslate(); } catch (e) { toast("No se ha podido pegar. Mantén pulsado el cuadro y elige Pegar."); } };
   if (params.t) runTranslate();
@@ -194,9 +237,30 @@ function runTranslate(gesture) {
   const tok = (runTranslate.n = (runTranslate.n || 0) + 1);
   const links = `<div class="row" style="margin-top:8px"><a class="btn" href="${gUrl(text, from, to)}" target="_blank" rel="noopener">Google Traductor ↗</a><a class="btn" href="${dUrl(text, from, to)}" target="_blank" rel="noopener">DeepL ↗</a></div>`;
   out.innerHTML = `<p class="muted small">Detectado: <b>${lang === "es" ? "español → italiano" : "italiano → español"}</b>${params.dir === "auto" || !params.dir ? " (si no es así, elige el sentido arriba)" : ""}.</p>
-  <div class="note"><b>Traducción completa:</b> ábrela en Google Traductor o DeepL (necesitan internet).${lang === "es" ? " Después copia el italiano que te den y pégalo aquí: verás su pronunciación, el audio y cada palabra." : ""}${links}</div>
+  <div class="note"><b>Elige cómo traducir</b> ${trContext() ? `<span class="tag ok">con contexto</span>` : `<span class="muted small">(añade el contexto arriba para afinar)</span>`}
+    <div style="display:grid;gap:8px;margin-top:10px">
+      <button class="btn pri" id="texp">⭐ Traducción experta con Claude <span class="small" style="font-weight:400">· la más precisa · internet</span></button>
+      <button class="btn" id="tloc">${svg("chat")} Con la IA del dispositivo <span class="small muted" style="font-weight:400">· sin internet</span></button>
+    </div>${links}
+    ${lang === "es" ? `<p class="muted small" style="margin:8px 0 0">Después copia el italiano que te den y pégalo aquí: verás su pronunciación, el audio y cada palabra.</p>` : ""}</div>
   <div id="tbr"></div><div id="tit"></div><div id="tsim"></div>`;
   if (lang === "it") drawItalian(text, ""); else drawSpanish(text);
+  $("#texp").onclick = async () => {
+    const pr = expertPrompt(text, from); let copied = false;
+    try { await navigator.clipboard.writeText(pr); copied = true; } catch (e) {}
+    window.open("https://claude.ai/new?q=" + encodeURIComponent(pr), "_blank", "noopener");
+    toast(copied ? "Instrucciones copiadas: si Claude no las muestra ya escritas, pégalas." : "Se abre Claude con la petición preparada.");
+  };
+  $("#tloc").onclick = async () => {
+    if (typeof aiEngine !== "function" || !aiEngine()) { $("#tbr").innerHTML = `<p class="note">Primero prepara la IA en <button class="linkb" data-go="ai">IA del dispositivo</button> (se descarga una vez). Después vuelve aquí.</p>`; return; }
+    $("#tbr").innerHTML = `<p class="muted">La IA está traduciendo…</p>`;
+    try {
+      const r = await localTranslate(text, from); if (tok !== runTranslate.n) return;
+      $("#tbr").innerHTML = `<div class="note ok"><div class="muted small">IA del dispositivo (modelo pequeño: revísala)</div><div style="font-size:1.15rem;margin-top:4px">${to === "it" ? `<span class="it">${esc(r.tr)}</span>` : esc(r.tr)}</div>
+        ${r.alt ? `<div style="margin-top:6px"><span class="muted small">Alternativa:</span> ${to === "it" ? `<span class="it">${esc(r.alt)}</span>` : esc(r.alt)}</div>` : ""}${r.note ? `<div class="muted small" style="margin-top:6px">${esc(r.note)}</div>` : ""}</div>`;
+      if (to === "it") drawItalian(r.tr, text); else { const b = $("#tsave"); if (b) b.onclick = () => noteForm(text, r.tr); }
+    } catch (e) { $("#tbr").innerHTML = `<p class="note err">No se ha podido traducir: ${esc(e.message || e)}</p>`; }
+  };
   const sim = similarPhrases(text, lang);
   $("#tsim").innerHTML = sim.length ? `<h2 class="s">Frases de la app que se parecen <span class="muted small">(revisadas, funcionan sin internet)</span></h2><div class="list">${sim.map(p => p.id ? entryHTML(p, { phr: true, slow: true }) : entryHTML(p, { slow: true, fav: false })).join("")}</div>` : "";
   /* Chrome de ordenador: traducción dentro del navegador (si tarda o no está disponible, se queda lo anterior) */

@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.7";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,7 +33,7 @@ const ART_IT = /^(il|lo|la|l|i|gli|le|un|uno|una)\s+/;
 const ART_ES = /^(el|la|los|las|lo|un|una|unos|unas)\s+/;
 function variants(s, art) {
   const out = new Set();
-  String(s).replace(/\([^)]*\)/g, " ").split(/\s*[\/,;]\s*|\s+o\s+/).forEach(p => {
+  String(s).replace(/\([^)]*\)/g, " ").replace(/\b(il|lo|la|l'|i|gli|le|un|uno|una|el|los|las)\s*\/\s*(il|lo|la|l'|i|gli|le|un|uno|una|el|los|las)\s+/gi, "$1 ").split(/\s*[\/,;]\s*|\s+o\s+/).forEach(p => {
     const n = norm(p); if (!n) return;
     out.add(n); const b = n.replace(art, ""); if (b) out.add(b);
   });
@@ -84,6 +84,15 @@ const TENSES = DATA.tenses;
 const DICT = DATA.dict.map((e, i) => ({ i, o: e[4] != null ? e[4] : i, it: e[0], pr: e[1], es: e[2], cat: e[3], id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) }));
 const PHR = DATA.phr.filter(p => !/^Participios/.test(p[3])).map(p => ({ it: p[0], pr: p[1], es: p[2], g: p[3], id: "f" + hash(p[0] + "|" + p[2]), kIt: [...variants(p[0], ART_IT), norm(p[0])], kEs: [...variants(p[2], ART_ES), norm(p[2])] }));
 const CARDS = Object.fromEntries([...DICT, ...PHR].map(e => [e.id, e]));
+/* Diccionario ampliado (se carga en segundo plano después de arrancar) */
+function addDict(rows) {
+  const base = DICT.length;
+  rows.forEach((e, k) => { const o = { i: base + k, o: 90000 + k, it: e[0], pr: e[1], es: e[2], cat: e[3], ext: 1, id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) };
+    if (CARDS[o.id]) return; DICT.push(o); CARDS[o.id] = o; NEWORDER.push(o); if (!CATS.includes(o.cat)) CATS.push(o.cat); });
+  if (typeof PR_READY !== "undefined") PR_READY = false;
+}
+function loadDictExt() { if (window.DICT2 || !DATA.dict2) return Promise.resolve(); return loadScript("./dict2.js").then(() => { addDict(window.DICT2); if (curView === "dict" && !$("#q").value) VIEWS.dict(); }).catch(() => {}); }
+setTimeout(() => { (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadDictExt()); }, 1200);
 const CORDER = ["familia", "números", "tiempo", "alimentos", "ciudad", "viajes", "verbos", "adjetivos", "compras", "casa", "cocina", "ropa", "cuerpo", "salud", "colores", "emociones", "adverbios", "conectores", "interjecciones", "expresiones", "ocio", "trabajo", "estudio", "naturaleza", "animales", "tecnología", "falsos amigos"];
 const crank = c => { const i = CORDER.indexOf(c); return i < 0 ? 99 : i; };
 const numv = e => { const n = parseFloat(String(e.es).replace(/\./g, "")); return isNaN(n) ? 1e12 : n; };
@@ -407,7 +416,8 @@ VIEWS.more = () => {
 /* ---------------------------------------------------------------- DICCIONARIO */
 VIEWS.dict = () => {
   const dir = params.dir || "both";
-  $("#view").innerHTML = `<h1 class="v">Diccionario</h1><p class="sub">Escribe en italiano o en español. Si te equivocas al escribir, te propone las palabras más parecidas. También reconoce formas verbales («vado», «feci»…).</p>
+  if (!window.DICT2) loadDictExt().then(() => { if (curView === "dict") { const r = $("#res"); if (r && $("#q").value) drawResults($("#q").value, params.dir || "both"); } });
+  $("#view").innerHTML = `<h1 class="v">Diccionario</h1><p class="sub"><b>${DICT.length.toLocaleString("es-ES")}</b> palabras. Escribe en italiano o en español. Si te equivocas al escribir, te propone las palabras más parecidas. También reconoce formas verbales («vado», «feci»…).</p>
   <input type="search" id="q" placeholder="ciao, mesa, forchetta, cuchillo…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Buscar palabra" value="${esc(params.q || "")}">
   <div class="row" style="margin-top:10px"><div class="seg" role="group" aria-label="Dirección">
    <button data-dir="both" aria-pressed="${dir === "both"}">Los dos</button><button data-dir="it" aria-pressed="${dir === "it"}">IT → ES</button><button data-dir="es" aria-pressed="${dir === "es"}">ES → IT</button></div></div>
@@ -441,6 +451,11 @@ function drawResults(qs, dir, r) {
     if (extra.length) { r.innerHTML = `<p class="muted">No hay resultados para la frase completa. Por palabras:</p><div class="list">${extra.map(e => entryHTML(e)).join("")}</div>`; return; }
   }
   if (!res.words.length && !res.phr.length && !res.forms.length) h += `<p class="note">No hay ninguna palabra parecida en el diccionario. Prueba con el infinitivo o el singular.</p>`;
+  { const q = qs.trim(), lang = (res.words[0] && res.words[0][1].kIt.includes(norm(q))) || FORMIDX.has(norm(q)) ? "it" : dir === "es" ? "es" : dir === "it" ? "it" : guessLang(q), e = encodeURIComponent(q);
+    if (q && q.split(/\s+/).length <= 4) h += `<div class="extlinks"><span class="muted small">Más acepciones y ejemplos (internet):</span>
+      <a href="https://www.wordreference.com/${lang === "it" ? "ites" : "esit"}/${e}" target="_blank" rel="noopener">WordReference</a>
+      <a href="https://context.reverso.net/traduccion/${lang === "it" ? "italiano-espanol" : "espanol-italiano"}/${e}" target="_blank" rel="noopener">Reverso (frases reales)</a>
+      ${lang === "it" ? `<a href="https://www.treccani.it/vocabolario/ricerca/${e}/" target="_blank" rel="noopener">Treccani</a>` : ""}</div>`; }
   if (norm(qs).split(" ").length >= 3) h += `<p style="margin-top:12px"><button class="btn" data-go="translate" data-p='${esc(JSON.stringify({ t: qs.trim() }))}'>${svg("translate")} Traducir la frase entera</button></p>`;
   r.innerHTML = h;
 }
