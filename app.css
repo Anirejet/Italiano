@@ -229,3 +229,7 @@ html{ scroll-padding-top:64px; }
 
 .extlinks{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:14px 0 4px; padding:10px 12px; border:1px dashed var(--line); border-radius:var(--r); }
 .extlinks a{ color:var(--verde); font-weight:700; }
+
+.aistate{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:12px 14px; margin:10px 0 4px; }
+.aiprog{ background:var(--verde-soft); border:2px solid var(--verde); border-radius:var(--r); padding:14px; margin-top:12px; }
+.aiprog .t{ font-weight:700; }

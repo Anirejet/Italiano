@@ -48,7 +48,38 @@ async function aiLoad(m) {
     throw e;
   } finally { AI_LOADING = false; drawAIStatus(); }
 }
-function drawAIStatus() { const el = $("#aistat"); if (!el) return; el.innerHTML = AI_LOADING ? `<div class="bar" style="margin:8px 0"><i style="width:${AIC.pct || 0}%"></i></div><p class="muted small">${esc(AI_PROG)}</p>` : (AI_PROG ? `<p class="note err">${esc(AI_PROG)}</p>` : ""); }
+function progEs(t) {
+  /* traduce los mensajes de WebLLM a algo comprensible */
+  const m = String(t).match(/(\d+)%\s*completed/i), mb = String(t).match(/([\d.]+)\s*MB\s*(fetched|loaded)/i);
+  if (/fetch|download/i.test(t)) return `Descargando el modelo${m ? ": " + m[1] + " %" : ""}${mb ? " (" + Math.round(+mb[1]) + " MB)" : ""}. No cierres la app ni bloquees la pantalla.`;
+  if (/load|gpu|shader|initial/i.test(t)) return `Cargando el modelo en la memoria del dispositivo${m ? ": " + m[1] + " %" : ""}… (las siguientes veces solo tarda esto)`;
+  if (/finish/i.test(t)) return "Listo.";
+  return t;
+}
+function drawAIStatus() {
+  const el = $("#aistat"); if (!el) return;
+  el.innerHTML = AI_LOADING ? `<div class="aiprog"><div class="t">${esc(progEs(AI_PROG))}</div><div class="bar" style="margin:10px 0 4px;height:12px"><i style="width:${Math.max(2, AIC.pct || 0)}%"></i></div><div class="muted small">${AIC.pct || 0} %</div></div>`
+    : (AI_PROG ? `<p class="note err">${esc(AI_PROG)}</p>` : "");
+  if (AI_LOADING && !drawAIStatus.scrolled) { drawAIStatus.scrolled = true; el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  if (!AI_LOADING) drawAIStatus.scrolled = false;
+}
+/* Comprueba qué modelos están descargados de verdad (mira la caché del navegador, sin cargar nada) */
+async function aiDownloaded() {
+  const out = {};
+  try {
+    if (!("caches" in window)) return out;
+    const c = await caches.open("webllm/model"); const keys = (await c.keys()).map(r => r.url);
+    for (const m of AI_MODELS) for (const f16 of [true, false]) {
+      const id = fullId(m, f16); const mine = keys.filter(u => u.indexOf("/" + id + "/") >= 0); if (!mine.length) continue;
+      let total = 0; const tc = mine.find(u => /tensor-cache\.json$/.test(u));
+      if (tc) { try { const j = await (await c.match(tc)).json(); total = (j.records || []).length; } catch (e) {} }
+      const shards = mine.filter(u => /params_shard_/.test(u)).length;
+      out[m.id] = { id, pct: total ? Math.round(100 * shards / total) : (shards ? 50 : 0), complete: total > 0 && shards >= total };
+    }
+  } catch (e) {}
+  return out;
+}
+function iosVersion() { const m = navigator.userAgent.match(/OS (\d+)[_.](\d+)/); return IS_IOS && m ? +m[1] + (+m[2] / 10) : null; }
 
 async function aiComplete(messages, opts = {}) {
   const req = Object.assign({ messages, temperature: 0.7, max_tokens: 260, stream: !!opts.onToken }, opts.req || {});
@@ -92,16 +123,16 @@ VIEWS.ai = () => {
   const ready = AIC.ready || {};
   $("#view").innerHTML = `<h1 class="v">Conversar con la IA</h1>
   <p class="sub">Una inteligencia artificial que funciona <b>dentro de tu dispositivo</b>: gratis, sin cuenta y sin enviar nada a internet. Se descarga una vez y después funciona sin conexión.</p>
-  <div id="aigpu" class="muted small">Comprobando si este dispositivo puede usarla…</div>
+  <div class="aistate" id="aistate"><div class="muted small">Comprobando este dispositivo…</div></div>
   <h2 class="s">1 · Elige el modelo</h2>
   <div class="list" style="padding:0">${AI_MODELS.map(m => { const isR = Object.keys(ready).some(k => k.indexOf(m.id + "-") === 0);
     return `<label class="task" style="cursor:pointer"><input type="radio" name="aim" value="${m.id}" ${(AIC.model || (isMobile ? AI_MODELS[0].id : AI_MODELS[1].id)) === m.id ? "checked" : ""} style="width:22px;height:22px;flex:none">
-    <div class="grow"><div class="t">${esc(m.name)} <span class="muted small">· para ${esc(m.rec)} · ${gb(m.mb)}</span>${isR ? ` <span class="tag ok">descargado</span>` : ""}</div><div class="muted small">${esc(m.desc)}</div></div></label>`; }).join("")}</div>
+    <div class="grow"><div class="t">${esc(m.name)} <span class="muted small">· para ${esc(m.rec)} · ${gb(m.mb)}</span> <span data-dlm="${m.id}"></span></div><div class="muted small">${esc(m.desc)}</div></div></label>`; }).join("")}</div>
   <p class="muted small">El tamaño es la memoria que necesita mientras funciona; la descarga es parecida. Hazla con wifi y con la pantalla encendida. Si el dispositivo no tiene memoria suficiente, aparecerá un aviso: prueba entonces con uno más pequeño.</p>
   <h2 class="s">2 · Con quién hablas</h2><div class="chips">${AI_ROLES2.map(([l], i) => `<button class="chip" aria-pressed="${(AIC.role || 0) === i}" data-air="${i}">${esc(l)}</button>`).join("")}</div>
   <div class="row" style="margin-top:12px"><label class="muted small" for="ailv">Nivel</label><select id="ailv" style="width:auto">${["A2", "A2-B1", "B1", "B2"].map(l => `<option ${l === level ? "selected" : ""}>${l}</option>`).join("")}</select>
   <label class="row" style="gap:6px"><input type="checkbox" id="aicorr" ${AIC.corr !== false ? "checked" : ""} style="width:22px;height:22px"> <span>Corregir mis errores</span></label></div>
-  <button class="btn pri big wide" id="aigo" style="margin-top:16px">Empezar la conversación</button>
+  <button class="btn pri big wide" id="aigo" style="margin-top:16px">Descargar (si hace falta) y empezar</button>
   <div id="aistat"></div>
   <details class="toc" style="margin-top:18px"><summary>Qué esperar (léelo una vez)</summary><div style="padding:0 14px 12px">
   <ul class="steps"><li>Son modelos pequeños: conversan bien a nivel A2–B1, pero <b>a veces se equivocan al corregir</b> o repiten cosas. Si una corrección te extraña, compruébala en el manual o en el diccionario.</li>
@@ -109,10 +140,22 @@ VIEWS.ai = () => {
   <li>Para hablar en voz alta se usa el mismo micrófono que en Conversar (en la app instalada del iPhone, el dictado del teclado). La IA te contesta con la voz italiana del dispositivo.</li>
   <li>El modelo ocupa espacio en el dispositivo. Puedes borrarlo abajo cuando quieras.</li></ul>
   <button class="btn small" id="aidel">Borrar los modelos descargados de este dispositivo</button></div></details>`;
-  aiCheckGPU().then(g => { const el = $("#aigpu"); if (!el) return;
-    el.innerHTML = g.ok ? `<span class="tag ok">Compatible</span> Este navegador tiene WebGPU${g.f16 ? "" : " (sin coma flotante de 16 bits: se usará una versión algo mayor del modelo)"}.`
-      : `<p class="note err">Este navegador no tiene WebGPU, que es lo que permite a la IA funcionar en el dispositivo. En el ordenador usa Chrome o Edge actualizados; en el iPhone hace falta iOS 26 o posterior (Ajustes → General → Actualización de software).</p>`;
-    $("#aigo").disabled = !g.ok; });
+  Promise.all([aiCheckGPU(), aiDownloaded(), navigator.storage && navigator.storage.estimate ? navigator.storage.estimate().catch(() => null) : null]).then(([g, dl, est]) => {
+    const el = $("#aistate"); if (!el) return; const iv = iosVersion();
+    const rows = [];
+    rows.push(g.ok ? `<div><span class="tag ok">✓ Compatible</span> Este navegador puede ejecutar la IA (WebGPU${g.f16 ? "" : ", sin coma flotante de 16 bits: se usa una versión algo mayor"}).</div>`
+      : `<div><span class="tag err">✗ No compatible</span> Este navegador no tiene WebGPU. ${iv != null ? (iv < 26 ? `Tu iPhone tiene <b>iOS ${String(iv).replace(".", ",")}</b>: hace falta <b>iOS 26 o posterior</b> (Ajustes → General → Actualización de software).` : "Tienes iOS 26 o posterior: prueba a abrir la app en Safari en vez de desde el icono, y viceversa.") : "En el ordenador usa Chrome o Edge actualizados."} Mientras tanto, puedes usar «Conversación libre con una app de IA» en Conversar.</div>`);
+    const names = AI_MODELS.filter(m => dl[m.id]);
+    rows.push(names.length ? `<div style="margin-top:6px"><b>Descargado en este dispositivo:</b> ${names.map(m => `${esc(m.name)} ${dl[m.id].complete ? `<span class="tag ok">completo</span>` : `<span class="tag">a medias (${dl[m.id].pct} %): pulsa «Empezar» para terminar</span>`}`).join(" · ")}</div>`
+      : `<div style="margin-top:6px"><b>Descargado:</b> ningún modelo todavía.</div>`);
+    if (AIE) rows.push(`<div style="margin-top:6px"><span class="tag ok">En marcha</span> La IA está cargada y lista.</div>`);
+    if (est && est.quota) rows.push(`<div class="muted small" style="margin-top:6px">Espacio usado por la app: ${gb(est.usage / 1048576)} · disponible para ella: ${gb(est.quota / 1048576)}.</div>`);
+    if (est && est.quota && est.quota - est.usage < 2.4 * 1073741824) rows.push(`<div class="note" style="margin-top:8px">El navegador solo deja a la app unos ${gb((est.quota - est.usage) / 1048576)} libres: puede que no quepa el modelo «Ligero». Libera espacio en el dispositivo o prueba con el «Mínimo».</div>`);
+    el.innerHTML = rows.join("");
+    $("#aigo").disabled = !g.ok;
+    if (!g.ok) $("#aigo").textContent = "No disponible en este navegador";
+    document.querySelectorAll("[data-dlm]").forEach(t => { const d = dl[t.dataset.dlm]; t.innerHTML = d ? (d.complete ? `<span class="tag ok">descargado</span>` : `<span class="tag">a medias ${d.pct} %</span>`) : ""; });
+  });
   $("#view").querySelectorAll("[data-air]").forEach(b => b.onclick = () => { AIC.role = +b.dataset.air; saveAIC(); $("#view").querySelectorAll("[data-air]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
   $("#ailv").onchange = e => { AIC.level = e.target.value; saveAIC(); };
   $("#aicorr").onchange = e => { AIC.corr = e.target.checked; saveAIC(); };

@@ -13,7 +13,7 @@ se instala en el iPhone desde Safari. Una vez instalada funciona sin internet.
 1. En la página del repositorio recién creado, pulsa el enlace **uploading an existing file**
    (o *Add file → Upload files*).
 2. Descomprime el ZIP en tu ordenador y **arrastra todo el contenido de la carpeta**
-   (index.html, app.js, app.css, data.js, route.js, sync.js, tools.js, talk.js, extra.js, ai.js, ai-worker.js, manual.js, content.js, sw.js, la carpeta *vendor*, manifest.webmanifest y la carpeta *icons*)
+   (index.html, app.js, app.css, data.js, route.js, sync.js, tools.js, talk.js, extra.js, ai.js, ai-worker.js, manual.js, content.js, dict2.js, sw.js, las carpetas *vendor* y *licencias*, manifest.webmanifest y la carpeta *icons*)
    a la zona de subida. Hazlo desde un ordenador con Chrome o Edge.
 3. Abajo, pulsa **Commit changes** y espera a que termine.
 

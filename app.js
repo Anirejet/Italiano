@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.7";
+const APP_VERSION = "1.8";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -930,6 +930,7 @@ VIEWS.help = () => {
   <li>Sigue la <b>Ruta por niveles</b>: A1, A2, B1 y B2 (55 unidades).</li>
   <li>En el repaso, valora con sinceridad: así la app te pregunta lo que necesitas.</li><li>Escucha y <b>repite en voz alta</b> cada frase; usa el botón «Despacio» al principio.</li>
   <li>Cuando algo no lo entiendas, búscalo en el <b>Manual</b> (tiene buscador).</li></ol>
+  <h2 class="s">Créditos y licencias</h2><p class="small">Unas 6.250 entradas del diccionario proceden del diccionario bilingüe español–italiano del proyecto <b>Apertium</b> (apertium-spa-ita, licencia GNU GPL 2.0), revisadas y corregidas una por una para esta app: <a href="./licencias/apertium-spa-ita-GPL-2.0.txt" target="_blank">licencia</a> · <a href="https://github.com/apertium/apertium-spa-ita" target="_blank" rel="noopener">datos originales</a>. La IA del dispositivo usa <b>WebLLM</b> (MLC, licencia Apache 2.0): <a href="./licencias/web-llm-Apache-2.0.txt" target="_blank">licencia</a>. Los modelos de IA son de Meta (Llama) y Alibaba (Qwen), con sus propias licencias.</p>
   <h2 class="s">Actualizaciones</h2><p>Cuando subas una versión nueva, la app la descargará la próxima vez que la abras con internet y te mostrará un aviso para actualizar. Tu progreso no se pierde.</p>`;
   if (params.s === "sync") setTimeout(() => { const h = $("#h-sync"); if (h) window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 60); }, 30);
 };
