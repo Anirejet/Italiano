@@ -72,6 +72,7 @@ function delErr(it) { const id = UNITS[it.ui].id; RT().errs = RT().errs.filter(x
 function exResult(ok, html, say) {
   const it = UX.items[UX.i];
   UX.st.done = true; UX.st.ok = ok; UX.st.fb = html;
+  if (typeof fx === "function") { fx(ok); skill("ejer", ok); }
   if (UX.mode === "place") { UX.hist.push(ok); if (ok) UX.ok++; }
   else if (ok) { UX.ok++; if (UX.mode === "errs") delErr(it); } else addErr(it);
   S.quiz.n++; if (ok) S.quiz.ok++; logActivity(); save();
@@ -166,7 +167,7 @@ function nextEx() {
   if (UX.mode === "unit") {
     const u = UNITS[UX.ui]; const r = RT(); const prev = r.best[u.id] || 0;
     r.best[u.id] = Math.max(prev, pct); const passed = pct >= PASS;
-    if (passed) plan().unit = true;
+    if (passed) { plan().unit = true; logActivity(20); if (typeof confetti === "function") { confetti(); fx(); } }
     save();
     const nx = UX.ui + 1 < UNITS.length ? UX.ui + 1 : -1;
     html = `<h1 class="v">${passed ? "Unità superata!" : "Casi…"}</h1><p class="sub">${esc(u.t)}</p>

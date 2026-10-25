@@ -151,7 +151,7 @@ function drawConv() {
   $("#crestart").onclick = () => { stopListening(); CV = null; VIEWS.conv(); };
   if (done) {
     const pct = Math.round(100 * CV.firstOk / c.turns.length);
-    if (!CV.saved) { CV.saved = true; if (!S.conv) S.conv = {}; const old = S.conv[c.id]; S.conv[c.id] = { best: Math.max(pct, old ? old.best : 0), t: Date.now() }; logActivity(); save(); if (S.set.auto) speak(c.end[0]); }
+    if (!CV.saved) { CV.saved = true; if (!S.conv) S.conv = {}; const old = S.conv[c.id]; S.conv[c.id] = { best: Math.max(pct, old ? old.best : 0), t: Date.now() }; logActivity(10); if (typeof confetti === "function" && pct >= 80) confetti(); save(); if (S.set.auto) speak(c.end[0]); }
     $("#cagain").onclick = () => { CV = null; VIEWS.conv(); window.scrollTo(0, 0); };
     scrollChat(); return;
   }
@@ -166,7 +166,7 @@ function drawConv() {
     } else {
       st.fb = `<b>No te he entendido del todo.</b> He oído: «${esc(m.t)}».<br>${m.miss.length > 1 ? "Faltan palabras como" : "Falta una palabra como"}: ${m.miss.map(g => `<b class="it">${esc(g[0])}</b>`).join(", ")}.<br><span class="muted small">Inténtalo otra vez o mira la respuesta modelo.</span>`;
     }
-    S.quiz.n++; if (!m.miss.length && st.tries === 1) S.quiz.ok++; save();
+    S.quiz.n++; if (!m.miss.length && st.tries === 1) S.quiz.ok++; if (typeof fx === "function") { fx(!m.miss.length); skill("habla", !m.miss.length); } save();
     drawConv();
   };
   const inp = $("#cans");

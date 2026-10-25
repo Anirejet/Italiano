@@ -1,7 +1,7 @@
 /* Guarda la app en el dispositivo para que funcione sin internet.
    Al publicar una versión nueva, cambia el número de VERSION. */
-const VERSION = "italiano-v1.8";
-const FILES = ["./", "./index.html", "./app.css", "./app.js", "./route.js", "./sync.js", "./tools.js", "./talk.js", "./extra.js", "./ai.js", "./ai-worker.js", "./manual.js", "./content.js", "./dict2.js", "./data.js", "./manifest.webmanifest",
+const VERSION = "italiano-v1.9";
+const FILES = ["./", "./index.html", "./app.css", "./theme.css", "./icons.js", "./fun.js", "./app.js", "./route.js", "./sync.js", "./tools.js", "./talk.js", "./extra.js", "./ai.js", "./ai-worker.js", "./manual.js", "./content.js", "./dict2.js", "./data.js", "./manifest.webmanifest",
   "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); });
 self.addEventListener("activate", e => {

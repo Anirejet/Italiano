@@ -24,13 +24,14 @@ function speakSeq(lines, rate) {
 const toks = s => norm(s).split(" ").filter(Boolean);
 /* Alinea palabras esperadas con las dichas/escritas (subsecuencia común más larga, aceptando pequeñas diferencias). */
 function alignWords(expected, got) {
-  const E = String(expected).split(/\s+/).filter(Boolean), en = E.map(w => norm(w)), gn = toks(got);
+  const nw = w => norm(String(w).replace(/['’`]/g, ""));
+  const E = String(expected).split(/\s+/).filter(Boolean), en = E.map(nw), gn = String(got).split(/\s+/).map(nw).filter(Boolean);
   const near = (a, b) => a === b || (a.length > 3 && lev(a, b, 1) <= 1);
   const n = en.length, m = gn.length, L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = near(en[i], gn[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
   const res = E.map(w => ({ w, ok: false, got: "" })); let i = 0, j = 0;
   while (i < n && j < m) { if (near(en[i], gn[j])) { res[i].ok = true; res[i].got = gn[j]; i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
-  return res.filter(r => norm(r.w));
+  return res.filter(r => nw(r.w));
 }
 function startRecorder(onStop) {
   if (!navigator.mediaDevices || !window.MediaRecorder) return Promise.reject(new Error("Este navegador no puede grabar audio."));
@@ -72,7 +73,7 @@ VIEWS.pron = () => {
     $("#pres").innerHTML = `<div class="note ${pct >= 85 ? "ok" : pct >= 60 ? "" : "err"}"><b>${pct >= 85 ? "Molto bene!" : pct >= 60 ? "Quasi!" : "Riprova"}</b> · ${pct}% de las palabras reconocidas.<br>
       <div style="font-family:var(--serif);font-size:1.25rem;margin:8px 0">${al.map(r => `<span class="${r.ok ? "wok" : "wbad"}">${esc(r.w)}</span>`).join(" ")}</div>
       <span class="muted small">He entendido: «${esc(said)}». Las palabras en rojo: escúchalas despacio y repítelas solas.</span></div>`;
-    logActivity(); save();
+    if (typeof fx === "function") { fx(pct >= 85); skill("habla", pct >= 85); } logActivity(); save();
   };
   $("#pchk").onclick = () => { const v = $("#pans").value.trim(); if (v) show(v); };
   const mic = $("#pmic");
@@ -98,7 +99,7 @@ function dictCompare(expected, typed) {
   const exact = new Set(tw.map(w => w.toLowerCase().replace(/[.,;:!?¡¿«»"]/g, "").replace(/’/g, "'")));
   let pts = 0;
   const out = al.map(r => { const clean = r.w.toLowerCase().replace(/[.,;:!?¡¿«»"]/g, "").replace(/’/g, "'");
-    let c = "wbad"; if (r.ok) { if (exact.has(clean)) { c = "wok"; pts += 1; } else if (norm(r.got) === norm(r.w)) { c = "wacc"; pts += 0.75; } else { c = "wnear"; pts += 0.5; } } return `<span class="${c}">${esc(r.w)}</span>`; });
+    let c = "wbad"; if (r.ok) { if (exact.has(clean)) { c = "wok"; pts += 1; } else if (r.got === norm(String(r.w).replace(/['’`]/g, ""))) { c = "wacc"; pts += 0.75; } else { c = "wnear"; pts += 0.5; } } return `<span class="${c}">${esc(r.w)}</span>`; });
   return { html: out.join(" "), pct: Math.round(100 * pts / Math.max(1, al.length)) };
 }
 VIEWS.dictation = () => {
@@ -123,7 +124,7 @@ VIEWS.dictation = () => {
         <button class="btn pri big wide" id="dnext" style="margin-top:12px">Siguiente</button>` : `<button class="btn pri big wide" id="dchk" style="margin-top:12px">Corregir</button>`}`;
     $("#dplay").onclick = () => speak(it[0]); $("#dslow").onclick = () => speak(it[0], 0.6);
     if (!DT.res && !DT.spoken) { DT.spoken = true; setTimeout(() => speak(it[0]), 300); }
-    if ($("#dchk")) $("#dchk").onclick = () => { const v = $("#dans").value; if (!v.trim()) { $("#dans").focus(); return; } DT.val = v; DT.res = dictCompare(it[0], v); DT.pts += DT.res.pct; S.quiz.n++; if (DT.res.pct >= 85) S.quiz.ok++; logActivity(); save(); VIEWS.dictation(); };
+    if ($("#dchk")) $("#dchk").onclick = () => { const v = $("#dans").value; if (!v.trim()) { $("#dans").focus(); return; } DT.val = v; DT.res = dictCompare(it[0], v); DT.pts += DT.res.pct; S.quiz.n++; if (DT.res.pct >= 85) S.quiz.ok++; if (typeof fx === "function") { fx(DT.res.pct >= 85); skill("escucha", DT.res.pct >= 85); } logActivity(); save(); VIEWS.dictation(); };
     if ($("#dnext")) $("#dnext").onclick = () => { DT.i++; DT.res = null; DT.val = ""; DT.spoken = false; VIEWS.dictation(); window.scrollTo(0, 0); };
   }
   $("#view").querySelectorAll("[data-dk]").forEach(b => b.onclick = () => { params.k = b.dataset.dk; DT = null; VIEWS.dictation(); });
@@ -161,7 +162,7 @@ VIEWS.read = () => {
     if (Object.keys(ans).length < r.q.length) { toast("Responde todas las preguntas."); return; }
     const ok = r.q.filter((q, i) => ans[i] === q[2]).length; const pct = Math.round(100 * ok / r.q.length);
     params.done = pct; const old = S.rd[r.id]; S.rd[r.id] = { best: Math.max(pct, old ? old.best : 0), t: Date.now() };
-    S.quiz.n += r.q.length; S.quiz.ok += ok; logActivity(); save(); const y = window.scrollY; VIEWS.read(); window.scrollTo(0, y);
+    S.quiz.n += r.q.length; S.quiz.ok += ok; if (typeof fx === "function") { for (let k = 0; k < r.q.length; k++) skill("lectura", k < ok); fx(pct >= 80 ? undefined : pct >= 60); if (pct >= 80) confetti(); } logActivity(5); save(); const y = window.scrollY; VIEWS.read(); window.scrollTo(0, y);
   };
   if ($("#ragain")) $("#ragain").onclick = () => { params.ans = {}; params.done = 0; delete params.done; VIEWS.read(); };
 };
@@ -245,8 +246,9 @@ VIEWS.exam = () => {
     if (p.k === "cto" || p.k === "cte") {
       let ok = 0, n = 0; p.tasks.forEach((t, ti) => (t.items || []).forEach((it, ii) => { n++; if ((EXS.ans[pi] || {})[ti + "_" + ii] === it.a) ok++; }));
       EXS.sc[pi] = Math.round(100 * ok / Math.max(1, n)) / 10; S.quiz.n += n; S.quiz.ok += ok;
+      if (typeof skill === "function") for (let k = 0; k < n; k++) skill(p.k === "cto" ? "escucha" : "lectura", k < ok);
     } else scoreProductive(pi, p);
-    logActivity(); save(); clearInterval(EXTMR); params.rev = 1; VIEWS.exam(); window.scrollTo(0, 0);
+    logActivity(10); save(); clearInterval(EXTMR); params.rev = 1; VIEWS.exam(); window.scrollTo(0, 0);
   };
 };
 function modelAndCheck(pi, ti, t, written) {

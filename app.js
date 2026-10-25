@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.8";
+const APP_VERSION = "1.9";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -25,7 +25,8 @@ const ICON = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   speaker: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
 };
-const svg = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
+if (window.LUCIDE) Object.assign(ICON, window.LUCIDE);   /* iconos Lucide (si están cargados) */
+const svg = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ""}</svg>`;
 
 /* ---------------------------------------------------------------- utilidades */
 const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[’'`]/g, " ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
@@ -83,11 +84,13 @@ const PERSONS = ["io", "tu", "lui / lei / Lei", "noi", "voi", "loro"];
 const TENSES = DATA.tenses;
 const DICT = DATA.dict.map((e, i) => ({ i, o: e[4] != null ? e[4] : i, it: e[0], pr: e[1], es: e[2], cat: e[3], id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) }));
 const PHR = DATA.phr.filter(p => !/^Participios/.test(p[3])).map(p => ({ it: p[0], pr: p[1], es: p[2], g: p[3], id: "f" + hash(p[0] + "|" + p[2]), kIt: [...variants(p[0], ART_IT), norm(p[0])], kEs: [...variants(p[2], ART_ES), norm(p[2])] }));
+const EMO = DATA.emoji || {};
+DICT.forEach(e => { if (EMO[e.it]) e.em = EMO[e.it]; });
 const CARDS = Object.fromEntries([...DICT, ...PHR].map(e => [e.id, e]));
 /* Diccionario ampliado (se carga en segundo plano después de arrancar) */
 function addDict(rows) {
   const base = DICT.length;
-  rows.forEach((e, k) => { const o = { i: base + k, o: 90000 + k, it: e[0], pr: e[1], es: e[2], cat: e[3], ext: 1, id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) };
+  rows.forEach((e, k) => { const o = { i: base + k, o: 90000 + k, it: e[0], pr: e[1], es: e[2], cat: e[3], ext: 1, em: EMO[e[0]], id: "w" + hash(e[0] + "|" + e[2]), kIt: variants(e[0], ART_IT), kEs: variants(e[2], ART_ES) };
     if (CARDS[o.id]) return; DICT.push(o); CARDS[o.id] = o; NEWORDER.push(o); if (!CATS.includes(o.cat)) CATS.push(o.cat); });
   if (typeof PR_READY !== "undefined") PR_READY = false;
 }
@@ -118,14 +121,14 @@ const profName = pr => (pr && pr.name) || ("Usuario " + (PROF.list.indexOf(pr) +
 function saveProf() { try { localStorage.setItem("italiano.profiles", JSON.stringify(PROF)); } catch (e) {} }
 function switchProfile(id) { PROF.cur = id; saveProf(); try { sessionStorage.setItem("italiano.picked", "1"); } catch (e) {} location.reload(); }
 const DEF = { cards: {}, days: {}, quiz: { ok: 0, n: 0 }, newDay: 0, newCount: 0, lastCh: 0, lastChT: 0, lastBackup: 0, plan: { day: 0, verb: 0, read: false, phr: [], unit: false }, route: { best: {}, errs: [], ed: {} },
-  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, rd: {}, ex: {}, ucards: {}, resetAt: 0,
+  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, rd: {}, ex: {}, ucards: {}, badges: {}, sk: {}, tm: {}, goalHit: {}, resetAt: 0,
   set: { rate: 0.9, newPerDay: 20, dir: "it", auto: true, pron: true, voice: "", theme: "auto", fs: 1 }, upd: 0 };
 function fresh() { return JSON.parse(JSON.stringify(DEF)); }
 function hydrate(o) {
   o = o || {}; const s = Object.assign(fresh(), o); Object.keys(s).forEach(k => { if (k[0] === "_") delete s[k]; });
   s.set = Object.assign({}, DEF.set, o.set); s.plan = Object.assign({}, DEF.plan, o.plan); s.quiz = Object.assign({}, DEF.quiz, o.quiz);
   s.route = Object.assign({ best: {}, errs: [], ed: {} }, o.route); if (!s.route.ed) s.route.ed = {}; if (!s.route.errs) s.route.errs = [];
-  ["fav", "notes", "pos", "qd", "cards", "days", "conv", "rd", "ex", "ucards"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
+  ["fav", "notes", "pos", "qd", "cards", "days", "conv", "rd", "ex", "ucards", "badges", "sk", "tm", "goalHit"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
   return s;
 }
 /* Cada dispositivo tiene un identificador propio (no se sincroniza): sirve para sumar bien los aciertos de varios dispositivos. */
@@ -138,7 +141,7 @@ function save(quiet) {
   if (!quiet && onSaved) onSaved();
 }
 function plan() { const t = today(); if (S.plan.day !== t) S.plan = { day: t, verb: 0, read: false, phr: [], unit: false }; return S.plan; }
-function logActivity(n = 1) { const t = today(); S.days[t] = (S.days[t] || 0) + n; }
+function logActivity(n = 1) { const t = today(); S.days[t] = (S.days[t] || 0) + n; if (typeof afterXP === "function") setTimeout(afterXP, 0); }
 function quizTotal() { const q = Object.assign({}, S.qd, { [DEV]: S.quiz }); let ok = 0, n = 0; Object.values(q).forEach(x => { ok += x.ok || 0; n += x.n || 0; }); return { ok, n }; }
 const isFav = id => (S.fav[id] || 0) > 0;
 function toggleFav(id) { S.fav[id] = isFav(id) ? -Date.now() : Date.now(); save(); return isFav(id); }
@@ -161,6 +164,10 @@ function merge(a, b) {
   for (const key of ["fav"]) { out[key] = {}; for (const src of [a, b]) for (const [k, t] of Object.entries(src[key])) if (after(Math.abs(t)) && Math.abs(t) > Math.abs(out[key][k] || 0)) out[key][k] = t; }
   out.notes = {}; for (const src of [a, b]) for (const [k, n] of Object.entries(src.notes)) if (after(n.t) && (!out.notes[k] || n.t > out.notes[k].t)) out.notes[k] = n;
   for (const key of ["rd", "ex"]) { out[key] = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src[key])) if (after(c.t) && (!out[key][k] || (c.best || 0) > (out[key][k].best || 0) || ((c.best || 0) === (out[key][k].best || 0) && c.t > out[key][k].t))) out[key][k] = c; }
+  out.badges = {}; out.goalHit = {}; for (const src of [a, b]) { for (const [k, t] of Object.entries(src.badges)) if (after(t)) out.badges[k] = Math.min(out.badges[k] || Infinity, t); for (const k of Object.keys(src.goalHit)) out.goalHit[k] = 1; }
+  out.tm = {}; for (const src of both) for (const [k, m] of Object.entries(src.tm)) out.tm[k] = Math.max(out.tm[k] || 0, m);
+  out.sk = {}; const skN = d => Object.values(d || {}).reduce((a, x) => a + (x.n || 0), 0);
+  for (const src of both) for (const [dev, d] of Object.entries(src.sk)) if (!out.sk[dev] || skN(d) > skN(out.sk[dev])) out.sk[dev] = d;
   out.ucards = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.ucards)) if (after(c.t) && (!out.ucards[k] || c.t > out.ucards[k].t)) out.ucards[k] = c;
   out.conv = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.conv)) if (after(c.t) && (!out.conv[k] || c.best > out.conv[k].best || (c.best === out.conv[k].best && c.t > out.conv[k].t))) out.conv[k] = c;
   out.pos = {}; for (const src of [a, b]) for (const [k, p] of Object.entries(src.pos)) if (!out.pos[k] || (p.t || 0) > (out.pos[k].t || 0)) out.pos[k] = p;
@@ -273,7 +280,8 @@ function newAvailable() { const t = today(); if (S.newDay !== t) { S.newDay = t;
 function grade(id, g) {
   const t = today(); const isNew = !S.cards[id];
   const c = S.cards[id] || { b: 0, d: t, n: 0, ok: 0 };
-  if (isNew) { newAvailable(); S.newCount++; }
+  if (isNew) { newAvailable(); S.newCount++; c.f = t; }
+  if (typeof skill === "function") skill("vocab", g >= 2);
   c.n++; c.t = Date.now();
   if (g === 0) { c.b = 1; c.d = t; }
   else if (g === 1) { c.b = Math.max(1, c.b); c.d = t + 1; c.ok++; }
@@ -285,20 +293,28 @@ function streak() { let t = today(), n = 0; if (!S.days[t]) t--; while (S.days[t
 
 /* ---------------------------------------------------------------- navegación */
 const NAV = [["home", "Hoy", "home"], ["route", "Ruta por niveles", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
-  ["talk", "Conversar", "mic"], ["ai", "IA del dispositivo", "chat"], ["translate", "Traducir", "translate"], ["read", "Lecturas", "book"], ["exam", "Exámenes EOI", "cards"],
-  ["kitchen", "Cocina profesional", "practice"], ["saved", "Guardadas", "star"],
-  ["verbs", "Verbos", "verbs"], ["travel", "Viaje", "plane"], ["manual", "Manual", "book"], ["progress", "Progreso", "chart"],
-  ["settings", "Ajustes", "gear"], ["help", "Ayuda", "help"]];
-const BOTTOM = [["home", "Hoy", "home"], ["route", "Ruta", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["more", "Más", "more"]];
+  ["talk", "Conversar", "mic"], ["ai", "IA del dispositivo", "ai"], ["translate", "Traducir", "translate"], ["read", "Lecturas", "read"], ["exam", "Exámenes EOI", "exam"],
+  ["kitchen", "Cocina profesional", "kitchen"], ["travel", "Viaje", "plane"], ["verbs", "Verbos", "verbs"], ["manual", "Manual", "library"], ["saved", "Guardadas", "star"],
+  ["progress", "Progreso", "chart"], ["settings", "Ajustes", "gear"], ["help", "Ayuda", "help"]];
+/* Estilo C: cada sección con su color (tonos oscuros para que el texto blanco se lea bien) */
+const SEC = { home: "#D9480F", route: "#6D28D9", dict: "#1D4ED8", review: "#0F766E", practice: "#BE185D", talk: "#B45309", ai: "#A21CAF", translate: "#0E7490",
+  read: "#4D7C0F", exam: "#4338CA", kitchen: "#B91C1C", travel: "#047857", verbs: "#A16207", manual: "#92400E", saved: "#9A3412", progress: "#15803D",
+  settings: "#475569", help: "#334155", more: "#334155", badges: "#A16207" };
+const NAVMAP = Object.fromEntries(NAV.map(n => [n[0], n]));
+const SHORT = { route: "Ruta", dict: "Buscar", review: "Repasar", practice: "Practicar", talk: "Conversar", ai: "IA", translate: "Traducir", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", travel: "Viaje", verbs: "Verbos", manual: "Manual", saved: "Guardadas", progress: "Progreso", settings: "Ajustes", help: "Ayuda" };
+const DEF_BOTTOM = ["route", "dict", "review", "talk"];
+const bottomKeys = () => { const k = (S.set.nav || DEF_BOTTOM).filter(x => NAVMAP[x] && x !== "home").slice(0, 4); return k.length === 4 ? k : DEF_BOTTOM; };
 let curView = "home", params = {};
-const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings", pron: "practice", dictation: "practice", cards: "travel" };
+const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings", pron: "practice", dictation: "practice", cards: "travel", badges: "progress" };
 const TITLES = Object.fromEntries(NAV.map(([k, l]) => [k, l]));
-Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces", ai: "IA del dispositivo", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", cards: "Tarjetas", pron: "Pronunciación", dictation: "Dictado" });
+Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces", ai: "IA del dispositivo", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", cards: "Tarjetas", pron: "Pronunciación", dictation: "Dictado", badges: "Insignias" });
 function nav() {
   const cv = ALIAS[curView] || curView;
+  const BOTTOM = [["home", "Hoy", "home"], ...bottomKeys().map(k => [k, SHORT[k] || NAVMAP[k][1], NAVMAP[k][2]]), ["more", "Más", "more"]];
   const cur = k => (cv === k || (k === "more" && !BOTTOM.some(b => b[0] === cv))) ? 'aria-current="page"' : "";
-  $("#navSide").innerHTML = NAV.map(([k, l, ic]) => `<button class="navbtn" data-go="${k}" ${cv === k ? 'aria-current="page"' : ""}>${svg(ic)}${l}</button>`).join("");
-  $("#navBottom").innerHTML = BOTTOM.map(([k, l, ic]) => `<button class="navbtn" data-go="${k}" ${cur(k)}>${svg(ic)}${l}</button>`).join("");
+  document.body.dataset.sec = SEC[cv] ? cv : "more";
+  $("#navSide").innerHTML = NAV.map(([k, l, ic]) => `<button class="navbtn" style="--c:${SEC[k]}" data-go="${k}" ${cv === k ? 'aria-current="page"' : ""}><span class="nico">${svg(ic)}</span>${l}</button>`).join("");
+  $("#navBottom").innerHTML = BOTTOM.map(([k, l, ic]) => `<button class="navbtn" style="--c:${SEC[k]}" data-go="${k}" ${cur(k)}><span class="nico">${svg(ic)}</span>${l}</button>`).join("");
   drawTop();
 }
 /* ---- historial: «Atrás» devuelve a la pantalla anterior en el mismo punto (también el botón/gesto atrás del sistema) */
@@ -344,12 +360,17 @@ function drawTop() {
   $("#tbTr").onclick = () => go("translate");
   if (typeof drawSyncDot === "function") drawSyncDot();
 }
-function render() { RENDERING = true; try { if (typeof refreshNotes === "function") refreshNotes(); nav(); applyTheme(); hideSelBtn(); VIEWS[curView](); } finally { RENDERING = false; } }
+function render() { RENDERING = true; try { if (typeof refreshNotes === "function") refreshNotes(); nav(); applyTheme(); hideSelBtn(); VIEWS[curView](); decorateTitle(); } finally { RENDERING = false; } }
+function decorateTitle() {
+  const h = $("#view h1.v"); if (!h || h.querySelector(".vico") || h.dataset.noico != null) return;
+  const sec = ALIAS[curView] || curView; const n = NAVMAP[sec]; const ic = n ? n[2] : (sec === "more" ? "more" : null); if (!ic) return;
+  h.insertAdjacentHTML("afterbegin", `<span class="vico">${svg(ic)}</span>`);
+}
 const VIEWS = {};
 const favBtn = id => `<button class="favb" data-fav="${id}" aria-pressed="${isFav(id)}" aria-label="${isFav(id) ? "Quitar de guardadas" : "Guardar"}">${svg("star")}</button>`;
 document.addEventListener("click", e => { const b = e.target.closest("[data-fav]"); if (!b) return; const on = toggleFav(b.dataset.fav); document.querySelectorAll(`[data-fav="${b.dataset.fav}"]`).forEach(x => { x.setAttribute("aria-pressed", on); x.setAttribute("aria-label", on ? "Quitar de guardadas" : "Guardar"); }); toast(on ? "Guardada en «Guardadas»." : "Quitada de «Guardadas»."); });
 const entryHTML = (e, opts = {}) => `<div class="entry speakable">${opts.phr ? `<button class="say" data-say="${esc(e.it)}" data-phr="${e.id}" aria-label="Escuchar">${svg("speaker")}</button>` : sayBtn(e.it)}
-  <div class="grow"><div class="hw"><span class="it">${esc(e.it)}</span></div><div class="pr">[${esc(e.pr)}]</div><div class="tr">${esc(e.es)}</div>
+  <div class="grow"><div class="hw">${e.em ? `<span class="emo">${e.em}</span>` : ""}<span class="it">${esc(e.it)}</span></div><div class="pr">[${esc(e.pr)}]</div><div class="tr">${esc(e.es)}</div>
   ${opts.meta === false ? "" : `<div class="meta">${esc(e.cat || e.g || "")}${S.cards[e.id] ? " · en repaso" : ""}</div>`}
   ${opts.slow ? `<div style="margin-top:6px"><button class="btn small" style="padding:4px 10px" data-say="${esc(e.it)}" data-slow="1" ${opts.phr ? `data-phr="${e.id}"` : ""}>Despacio</button></div>` : ""}</div>${e.id && opts.fav !== false ? favBtn(e.id) : ""}</div>`;
 
@@ -519,7 +540,8 @@ const ACC_KEYS = ["à", "è", "é", "ì", "ò", "ù", "'"];
 document.addEventListener("focusin", e => {
   const el = e.target;
   if (!el.matches || !el.matches("input[type=text], textarea") || el.dataset.noacc != null) return;
-  if (el.nextElementSibling && el.nextElementSibling.classList.contains("accbar")) return;
+  const host = (el.parentNode && el.parentNode.classList && el.parentNode.classList.contains("clr-wrap")) ? el.parentNode : el;
+  if (host.nextElementSibling && host.nextElementSibling.classList.contains("accbar")) return;
   const bar = document.createElement("div"); bar.className = "accbar"; bar.setAttribute("aria-label", "Letras con acento");
   bar.innerHTML = ACC_KEYS.map(k => `<button type="button" tabindex="-1" data-acc="${k}">${k}</button>`).join("");
   bar.addEventListener("pointerdown", ev => ev.preventDefault());
@@ -531,7 +553,7 @@ document.addEventListener("focusin", e => {
     try { el.setSelectionRange(st + 1, st + 1); } catch (e2) {}
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  el.insertAdjacentElement("afterend", bar);
+  host.insertAdjacentElement("afterend", bar);
 });
 
 /* ---------------------------------------------------------------- REPASO */
@@ -547,7 +569,7 @@ VIEWS.review = () => {
   if (!SESSION || !SESSION.q.length) {
     const dueW = dueList("w").length, dueF = dueList("f").length, nw = newAvailable();
     $("#view").innerHTML = `<h1 class="v">Repasar</h1><p class="sub">Tarjetas con repetición espaciada: lo que sabes vuelve cada vez más tarde; lo que fallas vuelve pronto.</p>
-    ${SESSION && SESSION.done ? `<p class="note ok">Sessione terminata! ${SESSION.done} tarjetas repasadas. Bravo!</p>` : ""}
+    ${SESSION && SESSION.done && typeof ILL !== "undefined" ? `<div style="max-width:220px;margin:0 auto">${ILL.copa}</div>` : ""}${SESSION && SESSION.done ? `<p class="note ok">Sessione terminata! ${SESSION.done} tarjetas repasadas. Bravo!</p>${SESSION.deck === "smart" && RT().errs.length ? `<p><button class="btn pri" id="smartErr">Seguir con tus errores de la ruta (${RT().errs.length})</button></p>` : ""}` : ""}
     <div class="stats" style="margin:14px 0"><div class="stat"><b>${dueW}</b><span>palabras para repasar</span></div><div class="stat"><b>${dueF}</b><span>frases para repasar</span></div><div class="stat"><b>${nw}</b><span>nuevas disponibles hoy</span></div></div>
     <div class="row" style="margin-bottom:10px"><span class="muted">Qué repasar:</span><div class="seg" role="group" aria-label="Mazo"><button data-deck="w" aria-pressed="${(params.deck || "w") === "w"}">Palabras</button><button data-deck="f" aria-pressed="${params.deck === "f"}">Frases de viaje</button></div></div>
     <label class="muted" for="cat">${params.deck === "f" ? "Situación" : "Tema"} (opcional)</label>
@@ -557,6 +579,7 @@ VIEWS.review = () => {
     <button class="btn pri big wide" id="start" style="margin-top:18px">Empezar</button>
     <p class="muted small" style="margin-top:14px">Cómo valorar: <b>Otra vez</b> si no la sabías (vuelve en esta sesión), <b>Difícil</b> si te costó (mañana), <b>Bien</b> o <b>Fácil</b> si la sabías (vuelve en unos días).</p>`;
     $("#view").querySelectorAll("[data-deck]").forEach(b => b.onclick = () => { params.deck = b.dataset.deck; SESSION = null; VIEWS.review(); });
+    if ($("#smartErr")) $("#smartErr").onclick = () => { SESSION = null; startErrEx(); };
     $("#view").querySelectorAll("[data-d]").forEach(b => b.onclick = () => { S.set.dir = b.dataset.d; save(); SESSION = null; VIEWS.review(); });
     $("#start").onclick = () => { const v = $("#cat").value; const deck = params.deck || "w"; SESSION = buildSession(deck, v ? (deck === "f" ? e => e.g === v : e => e.cat === v) : null); if (!SESSION.q.length) { toast("No hay tarjetas pendientes ahí hoy. Prueba con otro tema."); SESSION = null; return; } VIEWS.review(); };
     return;
@@ -577,6 +600,7 @@ VIEWS.review = () => {
   $("#view").querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
     const g = +b.dataset.g; grade(e.id, g); SESSION.q.shift(); SESSION.showing = false; SESSION.dir = null;
     if (g === 0) SESSION.q.splice(Math.min(3, SESSION.q.length), 0, e.id); else SESSION.done++;
+    if (!SESSION.q.length && typeof fx === "function") { fx(); confetti(); }
     VIEWS.review(); const n = CARDS[SESSION.q[0]]; if (n && S.set.auto && (S.set.dir === "it")) speak(n.it);
   });
 };
@@ -597,7 +621,7 @@ VIEWS.practice = () => {
   <div class="list">${[["mcq", "Elige la traducción", "Ves la palabra italiana y eliges entre cuatro opciones."], ["mcqes", "Elige la palabra italiana", "Ves el español y eliges la forma italiana."],
     ["write", "Escríbela en italiano", "Ves el español y escribes la palabra en italiano."], ["listen", "Dictado", "Escuchas una palabra y la escribes."],
     ["conj", "Conjugación", "Escribes la forma verbal que se pide."], ["self", "Autoevaluación del manual", "Las 30 preguntas del capítulo 21, con su solución."],
-    ["go:pron", "Pronunciación", "Escuchas una frase, la repites en voz alta y ves qué palabras se entienden."], ["go:dictation", "Dictado", "Escuchas frases y las escribes; corrección palabra a palabra."]]
+    ["pic", "Tarjetas con imagen", "Ves el dibujo y eliges la palabra italiana (comida, animales, objetos…)."], ["go:pron", "Pronunciación", "Escuchas una frase, la repites en voz alta y ves qué palabras se entienden."], ["go:dictation", "Dictado", "Escuchas frases y las escribes; corrección palabra a palabra."]]
     .map(([k, t, d]) => `<div class="entry"><div class="grow"><b>${t}</b><div class="muted small">${d}</div></div><button class="btn pri" data-mode="${k}">Empezar</button></div>`).join("")}</div>`;
   $("#view").querySelectorAll("[data-mode]").forEach(b => b.onclick = () => b.dataset.mode.indexOf("go:") === 0 ? go(b.dataset.mode.slice(3)) : startPractice(b.dataset.mode, $("#pcat").value));
 };
@@ -605,7 +629,8 @@ function startPractice(mode, cat, opts = {}) {
   params.cat = cat;
   const travel = cat === "__viaje";
   if (travel && (mode === "write" || mode === "listen")) { toast("Con frases solo está el test. Elige un tema de palabras."); return; }
-  const pool = travel ? PHR : DICT.filter(e => !cat || e.cat === cat);
+  let pool = travel ? PHR : DICT.filter(e => !cat || e.cat === cat);
+  if (mode === "pic") { pool = DICT.filter(e => e.em && (!cat || travel || e.cat === cat)); if (pool.length < 4) pool = DICT.filter(e => e.em); }
   let items;
   if (mode === "conj") {
     items = [];
@@ -630,9 +655,10 @@ function drawPractice() {
   const it = PQ.items[PQ.i], m = PQ.mode;
   const head = `<div class="row" style="justify-content:space-between"><button class="back" id="pquit">← Salir</button><span class="muted small">${PQ.i + 1} / ${PQ.items.length} · aciertos: ${PQ.ok}</span></div>`;
   let body = "";
-  if (m === "mcq" || m === "mcqes") {
+  if (m === "mcq" || m === "mcqes" || m === "pic") {
     if (!it._opts) { const same = PQ.pool.filter(e => e !== it && e.es !== it.es && e.it !== it.it && (e.cat || e.g) === (it.cat || it.g)); const o = shuffle(same).slice(0, 3); while (o.length < 3) { const r = pick(PQ.pool, Math.floor(Math.random() * 1e6)); if (r !== it && !o.includes(r)) o.push(r); } it._opts = shuffle([it, ...o]); }
-    const qTxt = m === "mcq" ? `<div class="q itq"><span class="it">${esc(it.it)}</span></div><div class="pr">[${esc(it.pr)}]</div><div>${sayBtn(it.it)}</div>` : `<div class="q">${esc(it.es)}</div>`;
+    const qTxt = m === "mcq" ? `<div class="q itq"><span class="it">${esc(it.it)}</span></div><div class="pr">[${esc(it.pr)}]</div><div>${sayBtn(it.it)}</div>`
+      : m === "pic" ? `<div class="bigemo emo">${it.em}</div><div class="muted">¿Cómo se dice en italiano?</div>${PQ.done ? `<div class="muted small">${esc(it.es)}</div>` : ""}` : `<div class="q">${esc(it.es)}</div>`;
     body = `<div class="card speakable" style="min-height:160px">${qTxt}</div><div class="opts">${it._opts.map((o, k) => `<button class="opt ${PQ.done ? (o === it ? "good" : (k === PQ.pick ? "bad" : "")) : ""}" data-k="${k}" ${PQ.done ? "disabled" : ""}>${m === "mcq" ? esc(o.es) : `<span class="it">${esc(o.it)}</span>`}</button>`).join("")}</div>`;
   } else if (m === "write" || m === "listen" || m === "conj") {
     const top = m === "write" ? `<div class="q">${esc(it.es)}</div><div class="muted small">${esc(it.cat)}</div>`
@@ -680,7 +706,7 @@ function drawPractice() {
   $("#view").querySelectorAll("[data-self]").forEach(b => b.onclick = () => { const ok = b.dataset.self === "1"; if (ok) { PQ.ok++; S.quiz.ok++; } S.quiz.n++; logActivity(); save(); nextQ(); });
   if ($("#next")) { $("#next").onclick = nextQ; }
 }
-function finish(ok, msg) { PQ.done = true; if (ok) { PQ.ok++; S.quiz.ok++; } S.quiz.n++; PQ.fb = msg; PQ.fbc = ok ? "ok" : "err"; logActivity(); save(); drawPractice(); }
+function finish(ok, msg) { if (typeof fx === "function") { fx(ok); skill(PQ.mode === "listen" ? "escucha" : "ejer", ok); } PQ.done = true; if (ok) { PQ.ok++; S.quiz.ok++; } S.quiz.n++; PQ.fb = msg; PQ.fbc = ok ? "ok" : "err"; logActivity(); save(); drawPractice(); }
 function nextQ() {
   PQ.i++; PQ.done = false; PQ.fb = null; PQ.val = ""; PQ.pick = null; PQ.spoken = false;
   if (PQ.i >= PQ.items.length) { if (PQ.daily) { const r = PQ; PQ = null; toast(`Verbo del día: ${r.ok} de ${r.items.length}.`); go("home"); return; } VIEWS.practice(); }
@@ -861,6 +887,7 @@ VIEWS.settings = () => {
   <label for="theme">Aspecto</label><select id="theme">${[["auto", "Como el teléfono"], ["light", "Claro"], ["dark", "Oscuro"]].map(([k, l]) => `<option value="${k}" ${S.set.theme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
   ${typeof profilesHTML === "function" ? profilesHTML() : ""}
   ${typeof syncSettingsHTML === "function" ? syncSettingsHTML() : ""}
+  ${typeof funSettingsHTML === "function" ? funSettingsHTML() : ""}
   ${typeof reminderHTML === "function" ? reminderHTML() : ""}
   <h2 class="s">Copia de seguridad</h2>
   <p class="muted small">Además de la sincronización, puedes guardar una copia en un archivo (por ejemplo en Archivos o iCloud Drive) y recuperarla cuando quieras: se une con lo que ya tengas, no lo borra.${S.lastBackup ? " Última copia: " + new Date(S.lastBackup).toLocaleDateString("es-ES") + "." : ""}</p>
@@ -876,6 +903,7 @@ VIEWS.settings = () => {
   if (typeof bindSyncSettings === "function") bindSyncSettings();
   if (typeof bindProfiles === "function") bindProfiles();
   if (typeof bindReminder === "function") bindReminder();
+  if (typeof bindFunSettings === "function") bindFunSettings();
   $("#exp").onclick = exportBackup;
   $("#imp").onclick = () => $("#impf").click();
   $("#impf").onchange = e => { if (e.target.files[0]) importBackup(e.target.files[0]); };
@@ -903,6 +931,9 @@ VIEWS.help = () => {
   <li>La app comprueba que en tu respuesta están las palabras importantes. Si falta algo, te dice qué y puedes repetir o ver la respuesta modelo con audio.</li>
   <li>El reconocimiento de voz necesita internet y lo hace el navegador: en el ordenador, Chrome o Edge; en el iPhone, <b>Safari</b>. En la app instalada del iPhone Apple todavía no lo permite: ahí usa el <b>dictado del teclado</b> (añade el teclado italiano en Ajustes → General → Teclado → Teclados, y pulsa el micrófono del teclado).</li>
   <li>Para hablar de cualquier tema, «Conversación libre con una IA» te da unas instrucciones listas para copiar en una app de IA con voz.</li></ul>
+  <h2 class="s">Puntos, niveles e insignias</h2><p>Todo lo que haces suma puntos (XP): el anillo de «Hoy» muestra tu objetivo diario (se cambia en Ajustes), la racha de días seguidos y tu nivel. Al superar unidades, terminar conversaciones o aprobar simulacros ganas insignias. En <b>Progreso</b> tienes gráficos por semana y tus aciertos por destreza.</p>
+  <h2 class="s">Repaso inteligente y tarjetas con imagen</h2><p>En «Hoy», el <b>repaso inteligente</b> junta en una sesión tus tarjetas pendientes, tus guardadas y las palabras nuevas; al terminar te propone repasar tus errores de la ruta. En Practicar, las <b>tarjetas con imagen</b> te enseñan un dibujo y eliges la palabra italiana.</p>
+  <h2 class="s">Detalles útiles</h2><p>Todos los cuadros de texto tienen una <b>✕</b> para borrar lo escrito. En Ajustes puedes elegir las 4 secciones de la barra de abajo, activar o quitar los sonidos y volver a ver la bienvenida.</p>
   <h2 class="s">La IA del dispositivo</h2><p>En <b>IA del dispositivo</b> eliges un modelo, se descarga una vez (de 0,9 a 5 GB según el modelo) y conversas de lo que quieras: hace de camarero, chef, farmacéutico o amigo y te corrige. Funciona sin internet y lo que escribes no sale del dispositivo. Necesita WebGPU: Chrome o Edge actualizados en el ordenador, o iOS 26 o posterior en el iPhone. Son modelos pequeños: a veces se equivocan al corregir.</p>
   <h2 class="s">Lecturas, dictado y pronunciación</h2><p><b>Lecturas</b>: 15 textos de A2 a B2 con audio frase a frase, traducción y preguntas. <b>Dictado</b>: escuchas y escribes; verde = bien, amarillo = acento o casi, rojo = mal o falta. <b>Pronunciación</b>: repites una frase y ves qué palabras se han entendido.</p>
   <h2 class="s">Exámenes tipo EOI</h2><p>Simulacros A2 y B1 con la estructura de las pruebas de certificación de Andalucía: comprensión oral (cada audio dos veces), comprensión escrita, expresión escrita (con contador de palabras, modelo y autoevaluación; o corrección con la IA del dispositivo) y expresión oral (puedes grabarte y escucharte).</p>
@@ -930,7 +961,7 @@ VIEWS.help = () => {
   <li>Sigue la <b>Ruta por niveles</b>: A1, A2, B1 y B2 (55 unidades).</li>
   <li>En el repaso, valora con sinceridad: así la app te pregunta lo que necesitas.</li><li>Escucha y <b>repite en voz alta</b> cada frase; usa el botón «Despacio» al principio.</li>
   <li>Cuando algo no lo entiendas, búscalo en el <b>Manual</b> (tiene buscador).</li></ol>
-  <h2 class="s">Créditos y licencias</h2><p class="small">Unas 6.250 entradas del diccionario proceden del diccionario bilingüe español–italiano del proyecto <b>Apertium</b> (apertium-spa-ita, licencia GNU GPL 2.0), revisadas y corregidas una por una para esta app: <a href="./licencias/apertium-spa-ita-GPL-2.0.txt" target="_blank">licencia</a> · <a href="https://github.com/apertium/apertium-spa-ita" target="_blank" rel="noopener">datos originales</a>. La IA del dispositivo usa <b>WebLLM</b> (MLC, licencia Apache 2.0): <a href="./licencias/web-llm-Apache-2.0.txt" target="_blank">licencia</a>. Los modelos de IA son de Meta (Llama) y Alibaba (Qwen), con sus propias licencias.</p>
+  <h2 class="s">Créditos y licencias</h2><p class="small">Unas 6.250 entradas del diccionario proceden del diccionario bilingüe español–italiano del proyecto <b>Apertium</b> (apertium-spa-ita, licencia GNU GPL 2.0), revisadas y corregidas una por una para esta app: <a href="./licencias/apertium-spa-ita-GPL-2.0.txt" target="_blank">licencia</a> · <a href="https://github.com/apertium/apertium-spa-ita" target="_blank" rel="noopener">datos originales</a>. Iconos: <b>Lucide</b> (licencia ISC): <a href="./licencias/lucide-ISC.txt" target="_blank">licencia</a>. Ilustraciones propias de la app. La IA del dispositivo usa <b>WebLLM</b> (MLC, licencia Apache 2.0): <a href="./licencias/web-llm-Apache-2.0.txt" target="_blank">licencia</a>. Los modelos de IA son de Meta (Llama) y Alibaba (Qwen), con sus propias licencias.</p>
   <h2 class="s">Actualizaciones</h2><p>Cuando subas una versión nueva, la app la descargará la próxima vez que la abras con internet y te mostrará un aviso para actualizar. Tu progreso no se pierde.</p>`;
   if (params.s === "sync") setTimeout(() => { const h = $("#h-sync"); if (h) window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 60); }, 30);
 };
