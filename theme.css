@@ -140,3 +140,61 @@ input[type=search]::-webkit-search-cancel-button{ -webkit-appearance:none; appea
 .task .ck .nico svg{ width:18px; height:18px; }
 .task:not(.done) .ck{ border-color:color-mix(in srgb, var(--c, var(--acc)) 45%, var(--line)); background:color-mix(in srgb, var(--c, var(--acc)) 10%, transparent); }
 .task.done .ck{ background:var(--c, var(--acc)); border-color:var(--c, var(--acc)); }
+
+/* ---------- v2.0: fichas de tiempos y traducción de formas */
+.tense h3 .tes{ display:block; font-weight:500; font-size:.78rem; color:var(--muted); margin-top:2px; }
+.tense .vt{ font-size:.8rem; color:var(--muted); margin-top:1px; }
+.tgrid.notr .vt{ display:none; }
+details.tinfo{ margin:4px 0 10px; border-radius:10px; background:var(--acc-soft); padding:6px 10px; font-size:.88rem; }
+details.tinfo summary{ cursor:pointer; font-weight:700; color:var(--acc-text); display:flex; align-items:center; gap:6px; list-style:none; }
+details.tinfo summary::-webkit-details-marker{ display:none; }
+details.tinfo summary svg{ width:16px; height:16px; }
+details.tinfo[open] summary{ margin-bottom:6px; }
+details.tinfo ul{ margin:4px 0 8px; padding-left:18px; } details.tinfo li{ margin:3px 0; }
+details.tinfo p{ margin:6px 0; } details.tinfo .ojo{ color:var(--ink); }
+.tex .exl{ display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid color-mix(in srgb, var(--acc) 15%, transparent); }
+.tex .es, .exl .es{ font-size:.82rem; color:var(--muted); }
+.tguide{ display:grid; gap:12px; } .tguide details.tinfo{ background:transparent; padding:0; }
+.gps{ display:flex; flex-wrap:wrap; gap:6px 18px; font-size:.92rem; }
+label.chk{ display:inline-flex; align-items:center; gap:6px; font-size:.9rem; color:var(--muted); cursor:pointer; }
+.tile.wide{ flex-direction:row; align-items:center; min-height:0; width:100%; gap:12px; }
+.tile.wide > svg{ width:26px; height:26px; color:var(--acc); flex:none; }
+.tile.wide b{ font-size:.98rem; color:var(--ink); }
+.entry .dex{ margin-top:6px; padding:6px 10px; border-left:3px solid var(--acc); background:var(--acc-soft); border-radius:0 8px 8px 0; font-size:.88rem; display:flex; flex-direction:column; gap:1px; }
+.entry .dex .it{ cursor:pointer; } .entry .dex .es{ color:var(--muted); font-size:.82rem; }
+.mxbox{ display:flex; align-items:center; gap:12px; margin-top:28px; padding:14px 16px; border-radius:16px; background:var(--acc-soft); }
+.mxbox[hidden]{ display:none; }
+/* ---------- v2.0: añadir a tarjetas, escucha, ciudades, modo viaje, buscador, impresión */
+.addw{ border:0; flex:none; width:34px; height:34px; border-radius:50%; display:inline-grid; place-items:center; background:var(--acc-soft); color:var(--acc-text); cursor:pointer; }
+.addw svg{ width:17px; height:17px; } .addw[aria-pressed="true"]{ background:var(--acc); color:#fff; }
+.cardex{ margin:12px auto 0; max-width:520px; padding:8px 12px; border-radius:10px; background:var(--acc-soft); font-size:.95rem; text-align:left; }
+.dlg{ display:grid; gap:8px; }
+.dl{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+.dl.b{ background:color-mix(in srgb, var(--acc) 7%, var(--surface)); }
+.dl .who{ flex:none; width:74px; font-weight:700; font-size:.8rem; color:var(--acc-text); padding-top:2px; overflow-wrap:anywhere; }
+.dl .it{ cursor:pointer; } .dl .es{ color:var(--muted); font-size:.88rem; margin-top:2px; }
+ul.clist{ margin:4px 0 8px; padding-left:20px; } ul.clist li{ margin:6px 0; line-height:1.45; }
+.tripl{ display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+.tripc{ background:var(--surface); box-shadow:var(--shadow); border-radius:18px; padding:16px; }
+.tripc .it{ font-size:1.45rem; font-weight:700; line-height:1.25; cursor:pointer; display:block; }
+.tripc .es{ color:var(--muted); margin-top:4px; }
+.gsl{ display:grid; gap:6px; }
+.gsr{ text-align:left; border:0; background:var(--surface); box-shadow:var(--shadow); border-radius:12px; padding:10px 12px; font:inherit; color:var(--ink); cursor:pointer; }
+#printArea{ display:none; }
+.certbox, .rsheet{ background:#fff; color:#111; border-radius:12px; padding:22px; box-shadow:var(--shadow); }
+.certbox h1{ margin:4px 0; font-size:1.7rem; } .certbox .ctop{ text-transform:uppercase; letter-spacing:.08em; font-size:.78rem; color:#555; margin:0; }
+.certbox .meta, .rsheet .meta{ color:#555; margin:0 0 12px; } .certbox h2, .rsheet h2{ font-size:1.05rem; margin:16px 0 6px; }
+.certbox .cnote{ font-size:.8rem; color:#555; margin-top:14px; }
+table.pt{ width:100%; border-collapse:collapse; font-size:.92rem; } table.pt td, table.pt th{ border-bottom:1px solid #ddd; padding:6px 8px; text-align:left; vertical-align:top; }
+table.pt th{ font-size:.8rem; text-transform:uppercase; color:#555; } table.pt td.n{ width:24px; color:#555; }
+@media print {
+  body.printing > *:not(#printArea){ display:none !important; }
+  body.printing #printArea{ display:block !important; color:#000; background:#fff; font-size:11pt; }
+  body.printing{ background:#fff !important; }
+  #printArea h1{ font-size:18pt; margin:0 0 4pt; } #printArea h1 small{ font-weight:400; font-size:12pt; color:#444; }
+  #printArea h2{ font-size:12.5pt; margin:12pt 0 4pt; border-bottom:1.5pt solid #000; padding-bottom:2pt; }
+  #printArea .certbox, #printArea .rsheet{ box-shadow:none; padding:0; }
+  #printArea table.pt td, #printArea table.pt th{ border-bottom:.5pt solid #999; padding:3pt 5pt; }
+  #printArea tr{ break-inside:avoid; } #printArea .pfoot{ margin-top:14pt; font-size:8.5pt; color:#555; }
+}
+body[data-sec="search"]{--acc:#1E40AF} body[data-sec="listen"]{--acc:#0369A1} body[data-sec="diary"]{--acc:#9F1239} body[data-sec="cities"]{--acc:#065F46}

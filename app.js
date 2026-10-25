@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.9";
+const APP_VERSION = "2.0";
 const DATA = window.DATA;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -95,7 +95,8 @@ function addDict(rows) {
   if (typeof PR_READY !== "undefined") PR_READY = false;
 }
 function loadDictExt() { if (window.DICT2 || !DATA.dict2) return Promise.resolve(); return loadScript("./dict2.js").then(() => { addDict(window.DICT2); if (curView === "dict" && !$("#q").value) VIEWS.dict(); }).catch(() => {}); }
-setTimeout(() => { (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadDictExt()); }, 1200);
+function loadDex() { if (window.DEX || !DATA.dex) return Promise.resolve(); return loadScript("./dex.js").then(() => { if (curView === "dict" && $("#res") && $("#q").value) drawResults($("#q").value, params.dir || "both"); }).catch(() => {}); }
+setTimeout(() => { (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { loadDictExt(); loadDex(); }); }, 1200);
 const CORDER = ["familia", "números", "tiempo", "alimentos", "ciudad", "viajes", "verbos", "adjetivos", "compras", "casa", "cocina", "ropa", "cuerpo", "salud", "colores", "emociones", "adverbios", "conectores", "interjecciones", "expresiones", "ocio", "trabajo", "estudio", "naturaleza", "animales", "tecnología", "falsos amigos"];
 const crank = c => { const i = CORDER.indexOf(c); return i < 0 ? 99 : i; };
 const numv = e => { const n = parseFloat(String(e.es).replace(/\./g, "")); return isNaN(n) ? 1e12 : n; };
@@ -121,14 +122,14 @@ const profName = pr => (pr && pr.name) || ("Usuario " + (PROF.list.indexOf(pr) +
 function saveProf() { try { localStorage.setItem("italiano.profiles", JSON.stringify(PROF)); } catch (e) {} }
 function switchProfile(id) { PROF.cur = id; saveProf(); try { sessionStorage.setItem("italiano.picked", "1"); } catch (e) {} location.reload(); }
 const DEF = { cards: {}, days: {}, quiz: { ok: 0, n: 0 }, newDay: 0, newCount: 0, lastCh: 0, lastChT: 0, lastBackup: 0, plan: { day: 0, verb: 0, read: false, phr: [], unit: false }, route: { best: {}, errs: [], ed: {} },
-  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, rd: {}, ex: {}, ucards: {}, badges: {}, sk: {}, tm: {}, goalHit: {}, resetAt: 0,
+  fav: {}, notes: {}, pos: {}, qd: {}, conv: {}, rd: {}, ex: {}, ls: {}, mx: {}, dia: {}, uw: {}, ucards: {}, badges: {}, sk: {}, tm: {}, goalHit: {}, resetAt: 0,
   set: { rate: 0.9, newPerDay: 20, dir: "it", auto: true, pron: true, voice: "", theme: "auto", fs: 1 }, upd: 0 };
 function fresh() { return JSON.parse(JSON.stringify(DEF)); }
 function hydrate(o) {
   o = o || {}; const s = Object.assign(fresh(), o); Object.keys(s).forEach(k => { if (k[0] === "_") delete s[k]; });
   s.set = Object.assign({}, DEF.set, o.set); s.plan = Object.assign({}, DEF.plan, o.plan); s.quiz = Object.assign({}, DEF.quiz, o.quiz);
   s.route = Object.assign({ best: {}, errs: [], ed: {} }, o.route); if (!s.route.ed) s.route.ed = {}; if (!s.route.errs) s.route.errs = [];
-  ["fav", "notes", "pos", "qd", "cards", "days", "conv", "rd", "ex", "ucards", "badges", "sk", "tm", "goalHit"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
+  ["fav", "notes", "pos", "qd", "cards", "days", "conv", "rd", "ex", "ls", "mx", "dia", "uw", "ucards", "badges", "sk", "tm", "goalHit"].forEach(k => { if (!s[k] || typeof s[k] !== "object") s[k] = {}; });
   return s;
 }
 /* Cada dispositivo tiene un identificador propio (no se sincroniza): sirve para sumar bien los aciertos de varios dispositivos. */
@@ -140,7 +141,7 @@ function save(quiet) {
   try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { toast("No se ha podido guardar el progreso."); }
   if (!quiet && onSaved) onSaved();
 }
-function plan() { const t = today(); if (S.plan.day !== t) S.plan = { day: t, verb: 0, read: false, phr: [], unit: false }; return S.plan; }
+function plan() { const t = today(); if (S.plan.day !== t) S.plan = { day: t, verb: 0, read: false, phr: [], unit: false, lis: false }; return S.plan; }
 function logActivity(n = 1) { const t = today(); S.days[t] = (S.days[t] || 0) + n; if (typeof afterXP === "function") setTimeout(afterXP, 0); }
 function quizTotal() { const q = Object.assign({}, S.qd, { [DEV]: S.quiz }); let ok = 0, n = 0; Object.values(q).forEach(x => { ok += x.ok || 0; n += x.n || 0; }); return { ok, n }; }
 const isFav = id => (S.fav[id] || 0) > 0;
@@ -163,17 +164,19 @@ function merge(a, b) {
   out.quiz = out.qd[DEV] ? { ok: out.qd[DEV].ok, n: out.qd[DEV].n } : { ok: 0, n: 0 };
   for (const key of ["fav"]) { out[key] = {}; for (const src of [a, b]) for (const [k, t] of Object.entries(src[key])) if (after(Math.abs(t)) && Math.abs(t) > Math.abs(out[key][k] || 0)) out[key][k] = t; }
   out.notes = {}; for (const src of [a, b]) for (const [k, n] of Object.entries(src.notes)) if (after(n.t) && (!out.notes[k] || n.t > out.notes[k].t)) out.notes[k] = n;
-  for (const key of ["rd", "ex"]) { out[key] = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src[key])) if (after(c.t) && (!out[key][k] || (c.best || 0) > (out[key][k].best || 0) || ((c.best || 0) === (out[key][k].best || 0) && c.t > out[key][k].t))) out[key][k] = c; }
+  for (const key of ["rd", "ex", "ls", "mx"]) { out[key] = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src[key])) if (after(c.t) && (!out[key][k] || (c.best || 0) > (out[key][k].best || 0) || ((c.best || 0) === (out[key][k].best || 0) && c.t > out[key][k].t))) out[key][k] = c; }
   out.badges = {}; out.goalHit = {}; for (const src of [a, b]) { for (const [k, t] of Object.entries(src.badges)) if (after(t)) out.badges[k] = Math.min(out.badges[k] || Infinity, t); for (const k of Object.keys(src.goalHit)) out.goalHit[k] = 1; }
   out.tm = {}; for (const src of both) for (const [k, m] of Object.entries(src.tm)) out.tm[k] = Math.max(out.tm[k] || 0, m);
   out.sk = {}; const skN = d => Object.values(d || {}).reduce((a, x) => a + (x.n || 0), 0);
   for (const src of both) for (const [dev, d] of Object.entries(src.sk)) if (!out.sk[dev] || skN(d) > skN(out.sk[dev])) out.sk[dev] = d;
+  out.uw = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.uw)) if (after(c.t) && (!out.uw[k] || c.t > out.uw[k].t)) out.uw[k] = c;
+  out.dia = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.dia)) if (after(c.t) && (!out.dia[k] || c.t > out.dia[k].t)) out.dia[k] = c;
   out.ucards = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.ucards)) if (after(c.t) && (!out.ucards[k] || c.t > out.ucards[k].t)) out.ucards[k] = c;
   out.conv = {}; for (const src of [a, b]) for (const [k, c] of Object.entries(src.conv)) if (after(c.t) && (!out.conv[k] || c.best > out.conv[k].best || (c.best === out.conv[k].best && c.t > out.conv[k].t))) out.conv[k] = c;
   out.pos = {}; for (const src of [a, b]) for (const [k, p] of Object.entries(src.pos)) if (!out.pos[k] || (p.t || 0) > (out.pos[k].t || 0)) out.pos[k] = p;
   const nb = (b.lastChT || 0) > (a.lastChT || 0); out.lastCh = nb ? b.lastCh : a.lastCh; out.lastChT = Math.max(a.lastChT || 0, b.lastChT || 0);
   if (both.length === 1) out.plan = both[0].plan;
-  else if (a.plan.day === b.plan.day) out.plan = { day: a.plan.day, verb: Math.max(a.plan.verb, b.plan.verb), read: a.plan.read || b.plan.read, unit: a.plan.unit || b.plan.unit, phr: [...new Set([...a.plan.phr, ...b.plan.phr])] };
+  else if (a.plan.day === b.plan.day) out.plan = { day: a.plan.day, verb: Math.max(a.plan.verb, b.plan.verb), read: a.plan.read || b.plan.read, unit: a.plan.unit || b.plan.unit, lis: !!(a.plan.lis || b.plan.lis), phr: [...new Set([...a.plan.phr, ...b.plan.phr])] };
   else out.plan = a.plan.day > b.plan.day ? a.plan : b.plan;
   if (a.newDay === b.newDay) out.newCount = Math.max(a.newCount, b.newCount); else { out.newDay = Math.max(a.newDay, b.newDay); out.newCount = a.newDay > b.newDay ? a.newCount : b.newCount; }
   const R = out.route; R.best = {}; R.ed = {}; const errs = {};
@@ -277,37 +280,62 @@ const INT = [0, 1, 3, 7, 16, 35, 90];
 const deckOf = id => (id[0] === "f" || id[0] === "u") ? "f" : "w";
 function dueList(deck, filter) { const t = today(); return Object.keys(S.cards).filter(id => CARDS[id] && deckOf(id) === deck && S.cards[id].d <= t && (!filter || filter(CARDS[id]))); }
 function newAvailable() { const t = today(); if (S.newDay !== t) { S.newDay = t; S.newCount = 0; } return Math.max(0, S.set.newPerDay - S.newCount); }
+/* Algoritmo FSRS-4.5 (el de Anki): estima cuándo vas a empezar a olvidar cada palabra y la pregunta justo antes.
+   Valores por defecto publicados del modelo; objetivo: recordar el 90 %. */
+const FW = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
+const clampD = d => Math.min(10, Math.max(1, d));
+const fsrsR = (days, s) => Math.pow(1 + 19 / 81 * days / s, -0.5);
+function fsrsState(c, t) {
+  /* tarjetas antiguas (sistema de cajas): se estima su estabilidad a partir de la caja */
+  if (c && c.s) return { s: c.s, d: c.dd || 5, el: Math.max(0, t - (c.lr != null ? c.lr : t)) };
+  if (c && c.n) return { s: Math.max(0.5, INT[c.b] || 1), d: 5, el: Math.max(0, INT[c.b] || 0) };
+  return null;
+}
+function fsrsNext(c, g, t) {
+  const G = g + 1; const st = fsrsState(c, t);
+  if (!st) { const s = FW[G - 1], d = clampD(FW[4] - (G - 3) * FW[5]); return { s, d }; }
+  const R = fsrsR(st.el, st.s);
+  let d = clampD(st.d - FW[6] * (G - 3)); d = clampD(FW[7] * (FW[4] - FW[5]) + (1 - FW[7]) * d);
+  let s;
+  if (G === 1) s = FW[11] * Math.pow(st.d, -FW[12]) * (Math.pow(st.s + 1, FW[13]) - 1) * Math.exp(FW[14] * (1 - R));
+  else s = st.s * (1 + Math.exp(FW[8]) * (11 - st.d) * Math.pow(st.s, -FW[9]) * (Math.exp(FW[10] * (1 - R)) - 1) * (G === 2 ? FW[15] : 1) * (G === 4 ? FW[16] : 1));
+  if (st.el === 0 && G > 1) s = Math.max(s, st.s);   /* repaso el mismo día: no se pierde lo ganado */
+  return { s: Math.min(s, 36500), d };
+}
+function fsrsDays(c, g) { if (g === 0) return 0; const t = today(); const n = fsrsNext(c, g, t); return Math.max(g === 1 ? 1 : 1, Math.round(n.s)); }
+const boxOf = s => s < 1 ? 1 : s < 3 ? 2 : s < 7 ? 3 : s < 16 ? 4 : s < 35 ? 5 : 6;   /* para las estadísticas (en aprendizaje / dominadas) */
+function fmtDays(n) { return n === 0 ? "ahora" : n === 1 ? "mañana" : n < 31 ? n + " d" : n < 365 ? Math.round(n / 30) + " mes" + (Math.round(n / 30) > 1 ? "es" : "") : Math.round(n / 36.5) / 10 + " años"; }
 function grade(id, g) {
   const t = today(); const isNew = !S.cards[id];
   const c = S.cards[id] || { b: 0, d: t, n: 0, ok: 0 };
   if (isNew) { newAvailable(); S.newCount++; c.f = t; }
   if (typeof skill === "function") skill("vocab", g >= 2);
-  c.n++; c.t = Date.now();
-  if (g === 0) { c.b = 1; c.d = t; }
-  else if (g === 1) { c.b = Math.max(1, c.b); c.d = t + 1; c.ok++; }
-  else if (g === 2) { c.b = Math.min(6, c.b + 1); c.d = t + INT[c.b]; c.ok++; }
-  else { c.b = Math.min(6, c.b + 2); c.d = t + INT[c.b]; c.ok++; }
+  const nx = fsrsNext(isNew ? null : c, g, t);
+  c.s = Math.round(nx.s * 100) / 100; c.dd = Math.round(nx.d * 100) / 100; c.lr = t;
+  c.n++; c.t = Date.now(); if (g > 0) c.ok++;
+  c.d = g === 0 ? t : t + Math.max(1, Math.round(nx.s));
+  c.b = g === 0 ? 1 : boxOf(nx.s);
   S.cards[id] = c; logActivity(); save();
 }
 function streak() { let t = today(), n = 0; if (!S.days[t]) t--; while (S.days[t]) { n++; t--; } return n; }
 
 /* ---------------------------------------------------------------- navegación */
-const NAV = [["home", "Hoy", "home"], ["route", "Ruta por niveles", "route"], ["dict", "Buscar", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
-  ["talk", "Conversar", "mic"], ["ai", "IA del dispositivo", "ai"], ["translate", "Traducir", "translate"], ["read", "Lecturas", "read"], ["exam", "Exámenes EOI", "exam"],
-  ["kitchen", "Cocina profesional", "kitchen"], ["travel", "Viaje", "plane"], ["verbs", "Verbos", "verbs"], ["manual", "Manual", "library"], ["saved", "Guardadas", "star"],
+const NAV = [["home", "Hoy", "home"], ["route", "Ruta por niveles", "route"], ["dict", "Buscar", "search"], ["search", "Buscar en toda la app", "search"], ["review", "Repasar", "cards"], ["practice", "Practicar", "practice"],
+  ["talk", "Conversar", "mic"], ["listen", "Escucha diaria", "headphones"], ["diary", "Diario", "diary"], ["ai", "IA del dispositivo", "ai"], ["translate", "Traducir", "translate"], ["read", "Lecturas", "read"], ["exam", "Exámenes EOI", "exam"],
+  ["kitchen", "Cocina profesional", "kitchen"], ["travel", "Viaje", "plane"], ["cities", "Ciudades", "pin"], ["verbs", "Verbos", "verbs"], ["manual", "Manual", "library"], ["saved", "Guardadas", "star"],
   ["progress", "Progreso", "chart"], ["settings", "Ajustes", "gear"], ["help", "Ayuda", "help"]];
 /* Estilo C: cada sección con su color (tonos oscuros para que el texto blanco se lea bien) */
 const SEC = { home: "#D9480F", route: "#6D28D9", dict: "#1D4ED8", review: "#0F766E", practice: "#BE185D", talk: "#B45309", ai: "#A21CAF", translate: "#0E7490",
   read: "#4D7C0F", exam: "#4338CA", kitchen: "#B91C1C", travel: "#047857", verbs: "#A16207", manual: "#92400E", saved: "#9A3412", progress: "#15803D",
-  settings: "#475569", help: "#334155", more: "#334155", badges: "#A16207" };
+  settings: "#475569", help: "#334155", more: "#334155", badges: "#A16207", search: "#1E40AF", listen: "#0369A1", diary: "#9F1239", cities: "#065F46" };
 const NAVMAP = Object.fromEntries(NAV.map(n => [n[0], n]));
-const SHORT = { route: "Ruta", dict: "Buscar", review: "Repasar", practice: "Practicar", talk: "Conversar", ai: "IA", translate: "Traducir", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", travel: "Viaje", verbs: "Verbos", manual: "Manual", saved: "Guardadas", progress: "Progreso", settings: "Ajustes", help: "Ayuda" };
+const SHORT = { route: "Ruta", dict: "Buscar", review: "Repasar", practice: "Practicar", talk: "Conversar", ai: "IA", translate: "Traducir", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", travel: "Viaje", verbs: "Verbos", manual: "Manual", saved: "Guardadas", progress: "Progreso", settings: "Ajustes", help: "Ayuda", search: "Buscar todo", listen: "Escucha", diary: "Diario", cities: "Ciudades" };
 const DEF_BOTTOM = ["route", "dict", "review", "talk"];
 const bottomKeys = () => { const k = (S.set.nav || DEF_BOTTOM).filter(x => NAVMAP[x] && x !== "home").slice(0, 4); return k.length === 4 ? k : DEF_BOTTOM; };
 let curView = "home", params = {};
-const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings", pron: "practice", dictation: "practice", cards: "travel", badges: "progress" };
+const ALIAS = { unit: "route", uex: "route", uerr: "route", uresult: "route", drill: "home", conv: "talk", aitalk: "talk", voices: "settings", pron: "practice", dictation: "practice", cards: "travel", badges: "progress", trip: "travel", cert: "progress", tenses: "verbs" };
 const TITLES = Object.fromEntries(NAV.map(([k, l]) => [k, l]));
-Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces", ai: "IA del dispositivo", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", cards: "Tarjetas", pron: "Pronunciación", dictation: "Dictado", badges: "Insignias" });
+Object.assign(TITLES, { more: "Más", unit: "Unidad", uex: "Ejercicios", uerr: "Mis errores", drill: "Verbo del día", translate: "Traducir", saved: "Guardadas", talk: "Conversar", conv: "Conversación", aitalk: "Conversar con IA", voices: "Voces", ai: "IA del dispositivo", read: "Lecturas", exam: "Exámenes", kitchen: "Cocina", cards: "Tarjetas", pron: "Pronunciación", dictation: "Dictado", badges: "Insignias", trip: "Modo viaje", cert: "Certificado", tenses: "Tiempos verbales" });
 function nav() {
   const cv = ALIAS[curView] || curView;
   const BOTTOM = [["home", "Hoy", "home"], ...bottomKeys().map(k => [k, SHORT[k] || NAVMAP[k][1], NAVMAP[k][2]]), ["more", "Más", "more"]];
@@ -371,6 +399,7 @@ const favBtn = id => `<button class="favb" data-fav="${id}" aria-pressed="${isFa
 document.addEventListener("click", e => { const b = e.target.closest("[data-fav]"); if (!b) return; const on = toggleFav(b.dataset.fav); document.querySelectorAll(`[data-fav="${b.dataset.fav}"]`).forEach(x => { x.setAttribute("aria-pressed", on); x.setAttribute("aria-label", on ? "Quitar de guardadas" : "Guardar"); }); toast(on ? "Guardada en «Guardadas»." : "Quitada de «Guardadas»."); });
 const entryHTML = (e, opts = {}) => `<div class="entry speakable">${opts.phr ? `<button class="say" data-say="${esc(e.it)}" data-phr="${e.id}" aria-label="Escuchar">${svg("speaker")}</button>` : sayBtn(e.it)}
   <div class="grow"><div class="hw">${e.em ? `<span class="emo">${e.em}</span>` : ""}<span class="it">${esc(e.it)}</span></div><div class="pr">[${esc(e.pr)}]</div><div class="tr">${esc(e.es)}</div>
+  ${opts.ex !== false && window.DEX && DEX[e.it] ? `<div class="dex"><span class="it">${esc(DEX[e.it][0])}</span><span class="es">${esc(DEX[e.it][2])}</span></div>` : ""}
   ${opts.meta === false ? "" : `<div class="meta">${esc(e.cat || e.g || "")}${S.cards[e.id] ? " · en repaso" : ""}</div>`}
   ${opts.slow ? `<div style="margin-top:6px"><button class="btn small" style="padding:4px 10px" data-say="${esc(e.it)}" data-slow="1" ${opts.phr ? `data-phr="${e.id}"` : ""}>Despacio</button></div>` : ""}</div>${e.id && opts.fav !== false ? favBtn(e.id) : ""}</div>`;
 
@@ -426,10 +455,11 @@ VIEWS.more = () => {
   $("#view").innerHTML = `<h1 class="v">Más</h1><div class="list menu" style="padding:0 14px">
   ${[["talk", "Conversar", "Habla en voz alta en situaciones reales y la app te entiende", "mic"], ["ai", "IA del dispositivo", "Conversación libre, gratis y sin internet", "chat"],
      ["read", "Lecturas", "Textos con audio y preguntas, de A2 a B2", "book"], ["exam", "Exámenes tipo EOI", "Simulacros A2 y B1 con la estructura oficial de Andalucía", "cards"],
-     ["kitchen", "Cocina profesional", "Recetas tradicionales, técnicas y los 14 alérgenos", "practice"], ["cards", "Tarjetas para enseñar", "Celíaco, alergias, taxi, médico… en grande", "plane"],
+     ["search", "Buscar en toda la app", "Diccionario, verbos, manual, lecturas, recetas, ciudades…", "search"], ["listen", "Escucha diaria", "Diálogos con varias voces y preguntas de comprensión", "headphones"], ["diary", "Diario en italiano", "Escribe cada día y la IA del dispositivo te corrige", "diary"],
+     ["kitchen", "Cocina profesional", "Recetas tradicionales, partidas, fichas imprimibles y los 14 alérgenos", "kitchen"], ["cities", "Ciudades", "Roma, Florencia, Venecia, Milán, Bolonia, Nápoles, Turín y Palermo", "pin"], ["trip", "Modo viaje", "Las 30 frases imprescindibles en grande", "luggage"], ["cards", "Tarjetas para enseñar", "Celíaco, alergias, taxi, médico… en grande", "plane"],
      ["pron", "Pronunciación", "Escucha, repite y mira qué palabras se entienden", "mic"], ["dictation", "Dictado", "Escucha y escribe; corrección palabra a palabra", "practice"], ["translate", "Traducir frases", "Frases enteras español ↔ italiano, con audio y análisis palabra por palabra", "translate"], ["saved", "Guardadas y mis frases", "Tus palabras con estrella y las frases que has guardado", "star"],
-     ["verbs", "Verbos", "114 verbos conjugados con audio y práctica", "verbs"], ["practice", "Practicar", "Test, escritura, dictado, conjugación y autoevaluación", "practice"], ["travel", "Viaje y frases útiles", "Frases por situaciones con audio", "plane"],
-     ["manual", "Manual", "Toda la gramática, con buscador", "book"], ["progress", "Progreso", "Estadísticas y copia de seguridad", "chart"],
+     ["verbs", "Verbos", `${VERBS.length} verbos conjugados con traducción, audio, fichas de cada tiempo y práctica`, "verbs"], ["practice", "Practicar", "Test, escritura, dictado, conjugación y autoevaluación", "practice"], ["travel", "Viaje y frases útiles", "Frases por situaciones con audio", "plane"],
+     ["manual", "Manual", "Toda la gramática, con buscador", "book"], ["progress", "Progreso", "Estadísticas, informe imprimible y copia de seguridad", "chart"],
      ["settings", "Ajustes, voz y sincronización", "Voz, tamaño de letra, sincronizar ordenador y móvil", "gear"], ["help", "Ayuda", "Instalar, usar sin conexión, copias", "help"]]
     .map(([k, t, d, ic]) => `<button data-go="${k}">${svg(ic)}<span><b>${t}</b><br><span class="muted small">${d}</span></span></button>`).join("")}</div>`;
 };
@@ -565,6 +595,7 @@ function buildSession(deck, filter) {
   return { q: [...due, ...fresh], done: 0, showing: false, dir: null, deck };
 }
 VIEWS.review = () => {
+  if (typeof syncUW === "function") syncUW();
   if (params.group) { const g = params.group; params.group = null; SESSION = buildSession("f", e => e.g === g); if (!SESSION.q.length) { SESSION = null; toast("No hay frases pendientes de ese grupo hoy."); } }
   if (!SESSION || !SESSION.q.length) {
     const dueW = dueList("w").length, dueF = dueList("f").length, nw = newAvailable();
@@ -592,8 +623,8 @@ VIEWS.review = () => {
   <div class="bar" style="margin-bottom:14px"><i style="width:${pct}%"></i></div>
   <div class="card speakable">${d === "it" ? `<div class="q itq"><span class="it">${esc(e.it)}</span></div><div class="pr">[${esc(e.pr)}]</div>` : `<div class="q">${esc(e.es)}</div><div class="muted small">${esc(e.cat || e.g)}</div>`}
   ${SESSION.showing ? `<hr style="border:0;border-top:1px solid var(--line);width:60%;margin:10px auto">${d === "it" ? `<div class="a">${esc(e.es)}</div>` : `<div class="a"><span class="it" style="font-size:1.4rem">${esc(e.it)}</span></div><div class="pr">[${esc(e.pr)}]</div>`}` : ""}
-  ${d === "it" || SESSION.showing ? `<div>${sayBtn(e.it)}</div>` : ""}</div>
-  ${SESSION.showing ? `<div class="grade"><button data-g="0">Otra vez<small>ahora</small></button><button data-g="1">Difícil<small>mañana</small></button><button data-g="2">Bien<small>${INT[Math.min(6, box + 1)]} d</small></button><button data-g="3">Fácil<small>${INT[Math.min(6, box + 2)]} d</small></button></div>`
+  ${d === "it" || SESSION.showing ? `<div>${sayBtn(e.it)}</div>` : ""}${SESSION.showing && typeof cardExample === "function" ? cardExample(e) : ""}</div>
+  ${SESSION.showing ? `<div class="grade"><button data-g="0">Otra vez<small>ahora</small></button><button data-g="1">Difícil<small>${fmtDays(fsrsDays(S.cards[e.id], 1))}</small></button><button data-g="2">Bien<small>${fmtDays(fsrsDays(S.cards[e.id], 2))}</small></button><button data-g="3">Fácil<small>${fmtDays(fsrsDays(S.cards[e.id], 3))}</small></button></div>`
     : `<button class="btn pri big wide" id="show" style="margin-top:14px">Mostrar respuesta</button>`}`;
   $("#quit").onclick = () => { SESSION = null; VIEWS.review(); };
   if (!SESSION.showing) $("#show").onclick = () => { SESSION.showing = true; VIEWS.review(); if (S.set.auto && SESSION.dir === "es") speak(e.it); };
@@ -715,20 +746,46 @@ function nextQ() {
 VIEWS.drill = () => { curView = "practice"; params.from = "home"; startPractice("conj", "", { vi: params.vi, t: params.t, daily: true }); };
 
 /* ---------------------------------------------------------------- VERBOS */
+/* Ficha de un tiempo: para qué sirve, cómo se forma, ojo, ejemplos con audio y traducción */
+const TINFO = DATA.tinfo || {};
+function tenseInfoHTML(t, open) {
+  const x = TINFO[t]; if (!x) return "";
+  return `<details class="tinfo"${open ? " open" : ""}><summary>${svg("help")}<span>¿Para qué sirve?</span></summary>
+  <ul>${x.uso.map(u => `<li>${esc(u)}</li>`).join("")}</ul>
+  <p><b>Cómo se forma.</b> ${esc(x.forma)}</p>
+  <p class="ojo"><b>Ojo.</b> ${esc(x.ojo)}</p>
+  <div class="tex">${x.ex.map(([it, pr, es]) => `<div class="exl">${sayBtn(it, true)}<div><span class="it">${esc(it)}</span><div class="pr">[${esc(pr)}]</div><div class="es">${esc(es)}</div></div></div>`).join("")}</div></details>`;
+}
+const PERS_IMP = ["", "(tu)", "(Lei)", "(noi)", "(voi)", "(Loro)"];
+VIEWS.tenses = () => {
+  const keys = Object.keys(TINFO);
+  $("#view").innerHTML = `<button class="back" data-go="verbs">← Verbos</button><h1 class="v">Los tiempos verbales</h1>
+  <p class="sub">Para qué sirve cada tiempo, cómo se forma, en qué se diferencia del español y ejemplos con audio. Toca una frase para escucharla.</p>
+  <div class="tguide speakable">${keys.map(t => `<section class="tense"><h3>${esc(t)} <span class="tes">${esc(TINFO[t].es)}</span></h3>${tenseInfoHTML(t, params.t === t)}</section>`).join("")}</div>`;
+  if (params.t) { const d = [...$("#view").querySelectorAll("details")].find(x => x.open); if (d) setTimeout(() => d.scrollIntoView({ block: "start" }), 50); }
+};
 VIEWS.verbs = () => {
   if (params.v != null) {
-    const v = VERBS[params.v];
+    const v = VERBS[params.v]; if (!v) { go("verbs", {}, { replace: true }); return; }
+    const E = v.E || {};
+    const row = (t, f, i) => { const es = E[t] && E[t][i];
+      return `<tr><td class="p">${t === "Imperativo" ? PERS_IMP[i] : (t.startsWith("Congiuntivo") ? "che " : "") + esc(PERSONS[i])}</td><td><span class="it">${esc(f[0])}</span> <span class="pr">[${esc(f[1])}]</span>${es ? `<div class="vt">${esc(es)}</div>` : ""}</td></tr>`; };
+    const gp = (lab, key, f) => `<div class="gp"><b>${lab}:</b> <span class="it">${esc(f[0])}</span> <span class="pr">[${esc(f[1])}]</span>${TINFO[key] ? ` <button class="linkb" data-go="tenses" data-p='{"t":"${key}"}'>¿para qué sirve?</button>` : ""}</div>`;
     $("#view").innerHTML = `<button class="back" data-go="verbs">← Todos los verbos</button>
     <div class="row speakable" style="flex-wrap:nowrap;align-items:flex-start">${sayBtn(v.inf)}<div><h1 class="v" style="margin:0"><span class="it">${esc(v.inf)}</span></h1><div class="pr">[${esc(v.pr)}]</div>
     <p class="sub" style="margin:4px 0 0">${esc(v.es)} · auxiliar: <b>${esc(v.aux)}</b></p></div></div>
-    <p class="muted small speakable" style="margin:12px 0">${esc(v.note)} Gerundio: <span class="it">${esc(v.ger[0])}</span> <span class="pr">[${esc(v.ger[1])}]</span> · Participio: <span class="it">${esc(v.part[0])}</span> <span class="pr">[${esc(v.part[1])}]</span></p>
-    <div class="row" style="margin-bottom:14px"><label class="muted" for="dt">Practicar:</label><select id="dt">${TENSES.filter(t => v.T[t].some(Boolean)).map(t => `<option>${t}</option>`).join("")}</select><button class="btn pri" id="dgo">Empezar</button></div>
-    <div class="tgrid speakable">${TENSES.map(t => `<div class="tense"><h3>${esc(t)}</h3><table>${v.T[t].map((f, i) => f ? `<tr><td class="p">${t === "Imperativo" ? ["", "(tu)", "(Lei)", "(noi)", "(voi)", "(Loro)"][i] : (t.startsWith("Congiuntivo") ? "che " : "") + esc(PERSONS[i])}</td><td><span class="it">${esc(f[0])}</span><br><span class="pr">[${esc(f[1])}]</span></td></tr>` : "").join("") || `<tr><td class="muted">No se usa.</td></tr>`}</table></div>`).join("")}</div>
-    <p class="muted small" style="margin-top:14px">Toca cualquier forma para escucharla.</p>`;
+    ${v.note ? `<p class="muted small" style="margin:12px 0 4px">${esc(v.note)}</p>` : ""}
+    <div class="speakable gps">${gp("Gerundio", "Gerundio", v.ger)}${gp("Participio", "Participio", v.part)}</div>
+    <div class="row" style="margin:12px 0 14px"><label class="muted" for="dt">Practicar:</label><select id="dt">${TENSES.filter(t => v.T[t].some(Boolean)).map(t => `<option>${t}</option>`).join("")}</select><button class="btn pri" id="dgo">Empezar</button>
+    <label class="chk"><input type="checkbox" id="vtr" ${S.set.vtr === false ? "" : "checked"}> Ver traducción</label></div>
+    <div class="tgrid speakable${S.set.vtr === false ? " notr" : ""}" id="tg">${TENSES.map(t => `<div class="tense"><h3>${esc(t)}${TINFO[t] ? ` <span class="tes">${esc(TINFO[t].es.split(":")[0])}</span>` : ""}</h3>${tenseInfoHTML(t)}<table>${v.T[t].map((f, i) => f ? row(t, f, i) : "").join("") || `<tr><td class="muted">No se usa.</td></tr>`}</table></div>`).join("")}</div>
+    <p class="muted small" style="margin-top:14px">Toca cualquier forma o ejemplo para escucharlo. «¿Para qué sirve?» abre la ficha del tiempo. <button class="linkb" data-go="tenses">Ver todas las fichas</button></p>`;
     $("#dgo").onclick = () => { params.from = "verbs"; startPractice("conj", "", { vi: params.v, t: $("#dt").value }); };
+    $("#vtr").onchange = e => { S.set.vtr = e.target.checked; save(true); $("#tg").classList.toggle("notr", !e.target.checked); };
     return;
   }
-  $("#view").innerHTML = `<h1 class="v">Verbos</h1><p class="sub">${VERBS.length} verbos conjugados en 10 tiempos, con pronunciación. Busca por infinitivo, traducción o cualquier forma («vado», «feci»…).</p>
+  $("#view").innerHTML = `<h1 class="v">Verbos</h1><p class="sub">${VERBS.length} verbos conjugados en 10 tiempos, con pronunciación y traducción de cada forma. Busca por infinitivo, traducción o cualquier forma («vado», «feci»…).</p>
+  ${Object.keys(TINFO).length ? `<button class="tile wide" data-go="tenses" style="margin-bottom:12px">${svg("help")}<span><b>¿Para qué sirve cada tiempo?</b><br><span class="muted small">Fichas con usos, formación, diferencias con el español y ejemplos</span></span></button>` : ""}
   <input type="search" id="vq" placeholder="Buscar verbo…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Buscar verbo" value="${esc(params.vq || "")}">
   <div class="seg" role="group" style="margin-top:10px">${[["", "Todos"], ["irregular", "Irregulares"], ["regular", "Regulares"]].map(([k, l]) => `<button data-f="${k}" aria-pressed="${(params.vf || "") === k}">${l}</button>`).join("")}</div>
   <div class="list" id="vl" style="margin-top:12px"></div>`;
@@ -756,6 +813,7 @@ VIEWS.travel = () => {
   $("#view").innerHTML = `<h1 class="v">Viaje y frases útiles</h1><p class="sub">Frases para desenvolverte en Italia, con audio normal y lento. Toca una situación.</p>
   <div class="chips">${GROUPS.map(x => `<button class="chip" aria-pressed="${x === g}" data-g="${esc(x)}">${esc(x)}</button>`).join("")}</div>
   <div class="row" style="margin-top:14px"><button class="btn pri" data-go="review" data-p='${JSON.stringify({ group: g, deck: "f" })}'>Repasar estas frases</button><button class="btn" data-go="pron" data-p='{"s":"viaje"}'>Practicar la pronunciación</button><button class="btn" data-go="cards">Tarjetas para enseñar</button><button class="btn" data-go="talk">Conversaciones</button></div>
+  <div class="row" style="margin-top:8px"><button class="btn pri" data-go="trip">${svg("luggage")} Modo viaje: 30 frases clave</button><button class="btn" data-go="cities">${svg("pin")} Guías de ciudades</button></div>
   <div class="list" style="margin-top:14px">${PHR.filter(p => p.g === g).map(p => entryHTML(p, { phr: true, slow: true, meta: false })).join("")}</div>`;
   $("#view").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { params.g = b.dataset.g; VIEWS.travel(); });
 };
@@ -801,6 +859,7 @@ VIEWS.manual = () => {
     <p class="muted small">Toca cualquier palabra en verde para oírla. Mantén pulsada cualquier palabra para buscarla o traducirla sin perder el sitio.</p>
     <details class="toc"><summary>Apartados de este capítulo</summary><div class="list" id="toc"></div></details>
     <div class="manual">${c.html}</div>
+    <div class="mxbox" id="mxbox" hidden><div class="grow"><b>Ejercicios de este capítulo</b><div class="muted small" id="mxinfo"></div></div><button class="btn pri" id="mxgo">Practicar</button></div>
     <div class="row" style="justify-content:space-between;margin-top:30px">${ci > 0 ? `<button class="btn" data-go="manual" data-p='{"c":${ci - 1}}'>← Anterior</button>` : "<span></span>"}
     ${ci < DATA.ch.length - 1 ? `<button class="btn pri" data-go="manual" data-p='{"c":${ci + 1}}'>Siguiente →</button>` : ""}</div>`;
     const bl = manualBlocks(); const heads = bl.map((el, k) => [el, k]).filter(([el]) => /^H[34]$/.test(el.tagName));
@@ -820,6 +879,9 @@ VIEWS.manual = () => {
       const k = S.pos[ci].b; setTimeout(() => { if (window.scrollY < 50) { scrollToBlock(k); toast("Sigues donde lo dejaste."); } }, 30);
     }
     delete params.top;
+    needContent().then(C => { const n = (C.mex && C.mex[ci] || []).length; const box = $("#mxbox"); if (!n || !box) return; box.hidden = false;
+      const st = S.mx[ci]; $("#mxinfo").textContent = `${n} ejercicios para comprobar lo que acabas de leer${st ? ` · tu mejor nota: ${st.best}%` : ""}.`;
+      $("#mxgo").onclick = () => startManualEx(ci); }).catch(() => {});
     trackReading(ci);
     return;
   }
@@ -828,7 +890,7 @@ VIEWS.manual = () => {
   ${S.lastChT ? `<p><button class="btn pri" data-go="manual" data-p='{"c":${lc}}'>Seguir leyendo: ${esc(DATA.ch[lc].title)}</button></p>` : ""}
   <input type="search" id="mq" placeholder="Buscar en el manual (congiuntivo, ci, preposiciones…)" aria-label="Buscar en el manual" autocomplete="off" autocorrect="off" value="${esc(params.mq || "")}">
   <div id="mres"></div><div class="list chlist" style="margin-top:14px">${DATA.ch.map((c, i) => { const p = S.pos[i]; const pct = p && p.n ? Math.round(100 * (p.b + 1) / p.n) : 0;
-    return `<button data-go="manual" data-p='{"c":${i}}'>${i === lc && S.lastChT ? "▸ " : ""}${esc(c.title)}${pct > 5 ? ` <span class="muted small">· leído ${pct}%</span>` : ""}</button>`; }).join("")}</div>`;
+    return `<button data-go="manual" data-p='{"c":${i}}'>${i === lc && S.lastChT ? "▸ " : ""}${esc(c.title)}${pct > 5 ? ` <span class="muted small">· leído ${pct}%</span>` : ""}${S.mx[i] ? ` <span class="muted small">· ejercicios ${S.mx[i].best}%</span>` : ""}</button>`; }).join("")}</div>`;
   let TXT = null;
   const runQ = () => {
     const v = $("#mq").value; params.mq = v;
@@ -913,6 +975,16 @@ VIEWS.settings = () => {
 /* ---------------------------------------------------------------- AYUDA */
 VIEWS.help = () => {
   $("#view").innerHTML = `<h1 class="v">Ayuda</h1>
+  <h2 class="s">Novedades de la versión 2.0</h2><ul class="steps">
+  <li><b>Verbos</b>: ${VERBS.length} verbos (antes 114). Debajo de cada forma está su traducción («vado» → «voy»); se puede ocultar con «Ver traducción». Cada tiempo tiene su ficha <b>«¿Para qué sirve?»</b>: usos, cómo se forma, en qué se diferencia del español y 4 ejemplos con audio y traducción. Todas las fichas juntas en Verbos → «¿Para qué sirve cada tiempo?».</li>
+  <li><b>Repaso con FSRS</b>: el mismo algoritmo que usa Anki. Calcula cuándo vas a empezar a olvidar cada tarjeta y te la pregunta justo antes; los botones muestran cuándo volverá («16 d», «1 mes»…). Tus tarjetas antiguas se adaptan solas.</li>
+  <li><b>Ejemplos en el diccionario</b>: casi 2.500 palabras con una frase de uso y su traducción (toca la frase para oírla). La frase aparece también al dar la vuelta a la tarjeta en Repasar.</li>
+  <li><b>Escucha diaria</b>: 30 diálogos (A2 y B1) con varias voces. Escucha primero sin leer, contesta las preguntas y después mira la transcripción.</li>
+  <li><b>Diario</b>: escribe unas líneas cada día; la IA del dispositivo te corrige sin internet y cada error se puede convertir en tarjeta con el botón <b>+</b>.</li>
+  <li><b>Botón +</b> (lecturas, escuchas, recetas, partidas, ciudades): añade esa palabra o frase a tus tarjetas de repaso, con la frase en la que aparece.</li>
+  <li><b>Ejercicios del manual</b>: al final de cada capítulo, 10 ejercicios para comprobar lo leído.</li>
+  <li><b>Ciudades</b> (8 guías), <b>Modo viaje</b> (30 frases clave en grande), <b>10 recetas nuevas</b>, <b>vocabulario por partidas</b> y <b>fichas bilingües</b> para imprimir o guardar en PDF.</li>
+  <li><b>Buscar en toda la app</b> e <b>Informe de progreso</b> imprimible (en Progreso).</li></ul>
   <h2 class="s">Moverte por la app sin perder el sitio</h2><ul class="steps">
   <li><b>‹ Atrás</b> (arriba a la izquierda) te devuelve a la pantalla anterior, en el mismo punto en que estabas. En el iPhone también puedes deslizar el dedo desde el borde izquierdo hacia la derecha.</li>
   <li><b>Lupa</b> (arriba a la derecha): busca una palabra encima de lo que estás haciendo; al cerrarla sigues exactamente donde estabas. En el ordenador también se abre con Ctrl+K.</li>
@@ -937,7 +1009,7 @@ VIEWS.help = () => {
   <h2 class="s">La IA del dispositivo</h2><p>En <b>IA del dispositivo</b> eliges un modelo, se descarga una vez (de 0,9 a 5 GB según el modelo) y conversas de lo que quieras: hace de camarero, chef, farmacéutico o amigo y te corrige. Funciona sin internet y lo que escribes no sale del dispositivo. Necesita WebGPU: Chrome o Edge actualizados en el ordenador, o iOS 26 o posterior en el iPhone. Son modelos pequeños: a veces se equivocan al corregir.</p>
   <h2 class="s">Lecturas, dictado y pronunciación</h2><p><b>Lecturas</b>: 15 textos de A2 a B2 con audio frase a frase, traducción y preguntas. <b>Dictado</b>: escuchas y escribes; verde = bien, amarillo = acento o casi, rojo = mal o falta. <b>Pronunciación</b>: repites una frase y ves qué palabras se han entendido.</p>
   <h2 class="s">Exámenes tipo EOI</h2><p>Simulacros A2 y B1 con la estructura de las pruebas de certificación de Andalucía: comprensión oral (cada audio dos veces), comprensión escrita, expresión escrita (con contador de palabras, modelo y autoevaluación; o corrección con la IA del dispositivo) y expresión oral (puedes grabarte y escucharte).</p>
-  <h2 class="s">Cocina, tarjetas, prueba de nivel y recordatorio</h2><p><b>Cocina profesional</b>: 10 recetas tradicionales en versión canónica, con audio, vocabulario y los 14 alérgenos en italiano. <b>Tarjetas</b>: frases para enseñar en grande (celíaco, alergias, taxi…), y puedes crear las tuyas. <b>Prueba de nivel</b> (en Ruta): te sitúa en la unidad adecuada. <b>Recordatorio</b> (en Ajustes): crea un evento diario en el calendario del móvil.</p>
+  <h2 class="s">Cocina, tarjetas, prueba de nivel y recordatorio</h2><p><b>Cocina profesional</b>: 20 recetas tradicionales en versión canónica, con audio, vocabulario y los 14 alérgenos en italiano. <b>Tarjetas</b>: frases para enseñar en grande (celíaco, alergias, taxi…), y puedes crear las tuyas. <b>Prueba de nivel</b> (en Ruta): te sitúa en la unidad adecuada. <b>Recordatorio</b> (en Ajustes): crea un evento diario en el calendario del móvil.</p>
   <h2 class="s">Voces</h2><p>En <b>Ajustes → Elegir y probar voces</b> ves las voces italianas del dispositivo, puedes probarlas con la misma frase y quedarte con la que mejor suene. Ahí mismo están los pasos para descargar más voces en iPhone, Windows, Mac y Android.</p>
   <h2 class="s">Varios usuarios</h2><p>En <b>Ajustes → Usuarios</b> puedes crear hasta 5 usuarios en el mismo dispositivo; cada uno con su progreso y su sincronización. Si cada persona usa su propio móvil, basta con que escriba su nombre. Varias personas pueden usar la misma cuenta de GitHub para sincronizar: al conectar, cada una elige o crea <b>su</b> progreso.</p>
   <h2 class="s" id="h-sync">Sincronizar el ordenador y el móvil</h2>

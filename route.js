@@ -53,6 +53,12 @@ function startErrEx() {
   UX = { mode: "errs", items: shuffle(items).slice(0, 20), i: 0, ok: 0, st: {} };
   pushHist(); curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
 }
+function startManualEx(c) {
+  const list = (window.CONTENT && CONTENT.mex && CONTENT.mex[c]) || [];
+  if (!list.length) { toast("Este capítulo aún no tiene ejercicios."); return; }
+  UX = { mode: "manual", c, items: list.map((x, xi) => ({ ui: -1, xi, x })), i: 0, ok: 0, st: {} };
+  pushHist(); curView = "uex"; params = {}; nav(); drawEx(); window.scrollTo(0, 0);
+}
 VIEWS.uex = () => { if (!UX) { go("route", {}, { replace: true }); return; } drawEx(); };
 VIEWS.uresult = () => go("route", {}, { replace: true });
 VIEWS.uerr = () => {
@@ -74,6 +80,7 @@ function exResult(ok, html, say) {
   UX.st.done = true; UX.st.ok = ok; UX.st.fb = html;
   if (typeof fx === "function") { fx(ok); skill("ejer", ok); }
   if (UX.mode === "place") { UX.hist.push(ok); if (ok) UX.ok++; }
+  else if (UX.mode === "manual") { if (ok) UX.ok++; }
   else if (ok) { UX.ok++; if (UX.mode === "errs") delErr(it); } else addErr(it);
   S.quiz.n++; if (ok) S.quiz.ok++; logActivity(); save();
   drawEx(); if (say) speak(say);
@@ -83,7 +90,7 @@ function drawEx() {
   const it = UX.items[UX.i]; const x = it.x; const st = UX.st;
   const u = UNITS[it.ui];
   const head = `<div class="row" style="justify-content:space-between"><button class="back" id="uquit">← Salir</button>
-    <span class="muted small">${UX.mode === "errs" ? "Repaso de errores" : UX.mode === "place" ? "Prueba de nivel · " + esc(u.lvl) : "Unidad " + (it.ui + 1)} · ${UX.i + 1}${UX.mode === "place" ? "" : " / " + UX.items.length}</span></div>
+    <span class="muted small">${UX.mode === "errs" ? "Repaso de errores" : UX.mode === "manual" ? "Manual · capítulo " + (UX.c + 1) : UX.mode === "place" ? "Prueba de nivel · " + esc(u.lvl) : "Unidad " + (it.ui + 1)} · ${UX.i + 1}${UX.mode === "place" ? "" : " / " + UX.items.length}</span></div>
     <div class="bar" style="margin-bottom:14px"><i style="width:${Math.round(100 * UX.i / UX.items.length)}%"></i></div>${UX.mode === "place" ? `<p class="muted small">Si no sabes la respuesta, pulsa «No lo sé» o elige la que te parezca: la prueba se detiene sola cuando llega a tu nivel.</p>` : ""}`;
   let body = "";
   if (x.k === "ch") {
@@ -116,7 +123,7 @@ function drawEx() {
     <button class="btn pri big wide" id="unext" style="margin-top:14px">${UX.i + 1 < UX.items.length ? "Siguiente" : "Ver resultado"}</button>` : "";
   $("#view").innerHTML = head + body + fb;
 
-  $("#uquit").onclick = () => { UX = null; if (HIST.length) goBack(); else go("route", {}, { replace: true }); };
+  $("#uquit").onclick = () => { const m = UX.mode === "manual"; UX = null; if (HIST.length) goBack(); else go(m ? "manual" : "route", {}, { replace: true }); };
   if (st.done) { $("#unext").onclick = nextEx; return; }
   if (x.k === "ch") $("#view").querySelectorAll("[data-k]").forEach(b => b.onclick = () => {
     st.pick = +b.dataset.k; const ok = st.pick === x.a; exResult(ok, `${ok ? "<b>Corretto!</b> " : "<b>No.</b> "}${x.w}`, x.say);
@@ -176,6 +183,13 @@ function nextEx() {
     <div class="row" style="margin-top:14px">${passed && nx >= 0 ? `<button class="btn pri" data-go="unit" data-p='{"u":${nx}}'>Siguiente unidad</button>` : ""}
     <button class="btn ${passed ? "" : "pri"}" data-go="unit" data-p='{"u":${UX.ui}}'>Repetir esta unidad</button>
     ${RT().errs.length ? `<button class="btn" data-go="uerr">Repasar mis errores</button>` : ""}<button class="btn" data-go="route">Ver la ruta</button></div>`;
+  } else if (UX.mode === "manual") {
+    const c = UX.c; const old = S.mx[c]; if (!old || pct > old.best) S.mx[c] = { best: pct, t: Date.now() }; if (pct >= PASS) { logActivity(10); if (typeof confetti === "function") confetti(); } save();
+    html = `<h1 class="v">${pct >= PASS ? "Ottimo!" : "Ejercicios terminados"}</h1><p class="sub">${esc((DATA.ch[c] || {}).title || "")}</p>
+    <div class="stats"><div class="stat"><b>${pct}%</b><span>aciertos (${UX.ok} de ${UX.items.length})</span></div><div class="stat"><b>${S.mx[c].best}%</b><span>tu mejor nota</span></div></div>
+    <div class="row" style="margin-top:14px"><button class="btn pri" id="mxAgain">Repetir</button><button class="btn" data-go="manual" data-p='{"c":${c}}'>Volver al capítulo</button></div>`;
+    UX = null; curView = "uresult"; params = {}; nav(); $("#view").innerHTML = html; window.scrollTo(0, 0);
+    $("#mxAgain").onclick = () => startManualEx(c); return;
   } else {
     html = `<h1 class="v">Repaso terminado</h1><div class="stats"><div class="stat"><b>${UX.ok} / ${UX.items.length}</b><span>aciertos</span></div><div class="stat"><b>${RT().errs.length}</b><span>errores pendientes</span></div></div>
     <div class="row" style="margin-top:14px">${RT().errs.length ? `<button class="btn pri" data-go="uerr">Seguir repasando</button>` : ""}<button class="btn" data-go="route">Ver la ruta</button></div>`;

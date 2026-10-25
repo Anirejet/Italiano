@@ -131,6 +131,12 @@ VIEWS.dictation = () => {
 };
 
 /* ---------------------------------------------------------------- LECTURAS GRADUADAS */
+/* frase de la lectura en la que aparece una palabra clave (para la tarjeta) */
+function readingCtx(r, w) {
+  const stem = norm(w).replace(/^(il|lo|la|i|gli|le|l'|un|uno|una|un')\s*/, "").replace(/\s*\(.*\)$/, "").split(/[ \/]/)[0];
+  const k = stem.length > 4 ? stem.slice(0, stem.length - 1) : stem;
+  return r.s.find(s2 => norm(s2[0]).includes(k)) || null;
+}
 VIEWS.read = () => {
   if (!window.CONTENT) { lazyView(needContent()); return; }
   const R = CONTENT.readings;
@@ -148,7 +154,8 @@ VIEWS.read = () => {
   <div class="row"><button class="btn pri" id="rall">${svg("speaker")} Escuchar todo</button><button class="btn" id="rslow">Despacio</button><button class="btn" id="rtr">${params.tr ? "Ocultar" : "Ver"} traducción</button></div>
   <div class="reading speakable">${r.s.map((s2, k) => `<p class="rs" data-rs="${k}"><span class="it-text">${esc(s2[0])}</span>${params.tr ? `<span class="rtr">${esc(s2[2])}</span>` : ""}</p>`).join("")}</div>
   <p class="muted small">Toca una frase para oírla; mantén pulsada una palabra para buscarla.</p>
-  <h2 class="s">Palabras clave</h2><div class="list">${r.w.map(w => `<div class="entry speakable">${sayBtn(w[0], true)}<div class="grow"><span class="it">${esc(w[0])}</span> <span class="pr">[${esc(w[1])}]</span><div class="tr">${esc(w[2])}</div></div></div>`).join("")}</div>
+  <h2 class="s">Palabras clave</h2><p class="muted small" style="margin-top:-6px">Con <b>+</b> la añades a tus tarjetas de repaso junto con la frase de la lectura en la que aparece.</p><div class="list">${r.w.map(w => { const cx = readingCtx(r, w[0]);
+    return `<div class="entry speakable">${sayBtn(w[0], true)}<div class="grow"><span class="it">${esc(w[0])}</span> <span class="pr">[${esc(w[1])}]</span><div class="tr">${esc(w[2])}</div></div>${addBtn(w[0], w[1], w[2], cx && cx[0], cx && cx[2])}</div>`; }).join("")}</div>
   <h2 class="s">Comprensión</h2>${r.q.map((q, qi) => `<div class="qbox"><div class="t">${qi + 1}. ${esc(q[0])}</div><div class="opts">${q[1].map((o, oi) => `<button class="opt ${done ? (oi === q[2] ? "good" : (ans[qi] === oi ? "bad" : "")) : (ans[qi] === oi ? "sel" : "")}" data-q="${qi}" data-o="${oi}" ${done ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
     ${done ? `<p class="muted small">${esc(q[3])}</p>` : ""}</div>`).join("")}
   ${done ? `<div class="note ${done >= 80 ? "ok" : ""}">Resultado: <b>${done}%</b>.</div><div class="row" style="margin-top:10px"><button class="btn" id="ragain">Repetir preguntas</button><button class="btn pri" data-go="read">Otras lecturas</button></div>`
@@ -273,19 +280,21 @@ VIEWS.kitchen = () => {
   }
   if (params.r == null) {
     $("#view").innerHTML = `<h1 class="v">Cocina profesional</h1><p class="sub">Recetas tradicionales en su versión canónica, en italiano con audio y traducción, con su vocabulario técnico y alérgenos.</p>
-    <div class="row"><button class="btn" data-go="kitchen" data-p='{"al":1}'>Los 14 alérgenos en italiano</button><button class="btn" data-go="dict" data-p='{"cat":"cocina profesional"}'>Vocabulario de cocina profesional</button></div>
+    <div class="row"><button class="btn" data-go="kitchen" data-p='{"al":1}'>Los 14 alérgenos en italiano</button><button class="btn" data-go="dict" data-p='{"cat":"cocina profesional"}'>Vocabulario de cocina profesional</button>${CONTENT.partidas ? `<button class="btn" data-go="partidas">Vocabulario por partidas</button>` : ""}</div>
     <div class="list" style="padding:0;margin-top:14px">${K.map((r, i) => `<div class="task"><div class="grow"><div class="t"><span class="it">${esc(r.t)}</span></div><div class="muted small">${esc(r.es_t)} · ${esc(r.region)} · ${esc(r.time)}</div></div><button class="btn pri" data-go="kitchen" data-p='{"r":${i}}'>Ver</button></div>`).join("")}</div>`;
     return;
   }
   const r = K[params.r];
   $("#view").innerHTML = `<p class="muted small" style="margin:0">${esc(r.region)} · ${r.serves} raciones · ${esc(r.time)}</p><h1 class="v speakable"><span class="it">${esc(r.t)}</span></h1><p class="sub">${esc(r.es_t)} <span class="pr">[${esc(r.tp)}]</span></p>
+  <div class="row"><button class="btn small" id="kprint">${svg("printer")} Ficha bilingüe para imprimir o PDF</button></div>
   <h2 class="s">Ingredienti</h2><div class="list">${r.ing.map(i => `<div class="entry speakable">${sayBtn(i[0], true)}<div class="grow"><span class="it">${esc(i[0])}</span> <span class="muted">· ${esc(i[2])}</span><div class="pr">[${esc(i[1])}]</div><div class="tr">${esc(i[3])}</div></div></div>`).join("")}</div>
   <h2 class="s">Procedimento</h2><div class="row" style="margin-bottom:8px"><button class="btn small" id="kall">${svg("speaker")} Escuchar todos los pasos</button></div>
   <ol class="steps speakable">${r.steps.map(s2 => `<li><span class="it">${esc(s2[0])}</span><div class="pr">[${esc(s2[1])}]</div><div class="muted">${esc(s2[2])}</div></li>`).join("")}</ol>
   <h2 class="s">Alérgenos</h2><div class="chips">${r.all.map(a => `<span class="chip">${esc(a)}</span>`).join("") || `<span class="muted">Ninguno de los 14 del reglamento.</span>`}</div>
-  <h2 class="s">Vocabulario técnico</h2><div class="list">${r.voc.map(v => `<div class="entry speakable">${sayBtn(v[0], true)}<div class="grow"><span class="it">${esc(v[0])}</span> <span class="pr">[${esc(v[1])}]</span><div class="tr">${esc(v[2])}</div></div></div>`).join("")}</div>
+  <h2 class="s">Vocabulario técnico</h2><div class="list">${r.voc.map(v => `<div class="entry speakable">${sayBtn(v[0], true)}<div class="grow"><span class="it">${esc(v[0])}</span> <span class="pr">[${esc(v[1])}]</span><div class="tr">${esc(v[2])}</div></div>${addBtn(v[0], v[1], v[2])}</div>`).join("")}</div>
   <h2 class="s">Notas</h2><p>${esc(r.notes)}</p>`;
   $("#kall").onclick = () => speakSeq(r.steps.map(s2 => ({ t: s2[0] })));
+  $("#kprint").onclick = () => printSheet(recipeSheet(r));
 };
 
 /* ---------------------------------------------------------------- TARJETAS PARA ENSEÑAR */

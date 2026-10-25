@@ -105,6 +105,7 @@ VIEWS.home = () => {
     [heard >= 5, "Frases para el viaje", `5 frases del día · escuchadas ${heard} de 5.`, "travel", "Escuchar", { today: 1 }, "plane", "travel"],
     [p.verb >= vgoal, `Verbo del día: ${vd.v.inf}`, `${vd.tense} · ${p.verb >= vgoal ? "hecho" : "aciertos: " + p.verb + " de " + vgoal}.`, "drill", "Practicar", { vi: vd.vi, t: vd.tense }, "verbs", "verbs"],
     [p.read, "Lectura del manual", `${ch.title}.`, "manual", "Leer", { c: chI }, "library", "manual"],
+    [!!p.lis, "Escucha diaria", "Un diálogo con preguntas de comprensión (5–8 minutos).", "listen", "Escuchar", null, "headphones", "listen"],
   ];
   const nu = nextUnitIndex();
   if (nu >= 0) tasks.unshift([!!p.unit, `Ruta: unidad ${nu + 1}`, `${UNITS[nu].t}.`, "unit", "Empezar", { u: nu }, "route", "route"]);
@@ -116,7 +117,7 @@ VIEWS.home = () => {
   const needBackup = Object.keys(S.cards).length >= 30 && Date.now() - (S.lastBackup || 0) > 14 * 864e5 && !(typeof SY !== "undefined" && SY.token);
   const tiles = [["route", "Ruta", "A1 → B2"], ["talk", "Conversar", "Habla en voz alta"], ["ai", "IA", "Charla libre"], ["read", "Lecturas", "Con audio"],
     ["practice", "Practicar", "Test, dictado…"], ["translate", "Traducir", "Con contexto"], ["kitchen", "Cocina", "Recetas y alérgenos"], ["exam", "Exámenes", "Tipo EOI"],
-    ["travel", "Viaje", "Frases y tarjetas"], ["dict", "Buscar", (DICT.length + (window.DICT2 ? 0 : (DATA.dict2 || 0))).toLocaleString("es-ES") + " palabras"]];
+    ["travel", "Viaje", "Frases y tarjetas"], ["listen", "Escucha", "Diálogos"], ["diary", "Diario", "Escribe y corrige"], ["cities", "Ciudades", "Guías"], ["search", "Buscar todo", "En toda la app"], ["dict", "Buscar", (DICT.length + (window.DICT2 ? 0 : (DATA.dict2 || 0))).toLocaleString("es-ES") + " palabras"]];
   $("#view").innerHTML = `<section class="dash">${ILL.toscana.replace("<svg ", '<svg class="ill" ')}
     <h1 class="v" data-noico>${hi}${named ? ", " + esc(name) : ""}!</h1>
     <p class="sub">${doneN} de ${tasks.length} tareas de hoy${PROF.list.length > 1 ? ` · <button class="linkb" id="chgUser" style="color:#fff">cambiar de usuario</button>` : ""}</p>
@@ -172,10 +173,11 @@ VIEWS.progress = () => {
     ids.forEach(id => { const f = S.cards[id].f; if (f != null && f >= t - w * 7 - 6 && f <= t - w * 7) nw++; }); weeks.push({ xp, mins, nw, lab: w === 0 ? "esta" : "-" + w }); }
   const mx = k => Math.max(1, ...weeks.map(w => w[k]));
   const bars = (k, unit) => `<div class="chartbars">${weeks.map(w => `<div><span>${Math.round(w[k])}</span><i style="height:${Math.round(85 * w[k] / mx(k))}%"></i><span>${w.lab}</span></div>`).join("")}</div>`;
-  const sk = skillTotals(); const SKN = { vocab: "Vocabulario", ejer: "Ejercicios", escucha: "Comprensión oral", habla: "Expresión oral", lectura: "Comprensión lectora" };
+  const sk = skillTotals(); const SKN = { vocab: "Vocabulario", ejer: "Ejercicios", escucha: "Comprensión oral", habla: "Expresión oral", lectura: "Comprensión lectora", escrit: "Expresión escrita" };
   const qt = quizTotal(); const totalMin = Object.values(S.tm).reduce((a, b) => a + b, 0);
   const hard = ids.filter(id => CARDS[id] && S.cards[id].n >= 2).map(id => [id, S.cards[id].ok / S.cards[id].n]).sort((a, b) => a[1] - b[1]).slice(0, 8).filter(x => x[1] < .7);
   $("#view").innerHTML = `<h1 class="v">Progreso</h1><p class="sub">Nivel ${levelOf(xpTotal()).L} · ${xpTotal().toLocaleString("es-ES")} XP · ${Math.round(totalMin / 60 * 10) / 10} horas de estudio registradas.</p>
+  <div class="row" style="margin-bottom:12px"><button class="btn" data-go="cert">${svg("printer")} Informe de progreso (PDF)</button></div>
   <div class="stats"><div class="stat"><b>${ids.length}</b><span>tarjetas empezadas</span></div><div class="stat"><b>${lv[1]}</b><span>en aprendizaje</span></div>
   <div class="stat"><b>${lv[2]}</b><span>dominadas</span></div><div class="stat"><b>${streak()}</b><span>días seguidos (mejor: ${maxStreak()})</span></div>
   <div class="stat"><b>${qt.n ? Math.round(100 * qt.ok / qt.n) + "%" : "—"}</b><span>aciertos en ejercicios</span></div><div class="stat"><b>${Object.keys(S.badges).length}</b><span><button class="linkb" data-go="badges">insignias</button></span></div></div>
